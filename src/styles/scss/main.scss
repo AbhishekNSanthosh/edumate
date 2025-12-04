@@ -1,0 +1,30 @@
+@import "custom/variables";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  padding: 0;
+  margin: 0;
+  font-family: $font-family;
+}
+
+/* Scrollbar Styling */
+.sidebarScroll::-webkit-scrollbar {
+  width: 0px; /* thinner scrollbar */
+}
+
+.sidebarScroll::-webkit-scrollbar-thumb {
+  background-color: #1f74fe45; /* your azure primary color */
+  border-radius: 10px;
+}
+
+.sidebarScroll::-webkit-scrollbar-thumb:hover {
+  background-color: #1558c0; /* slightly darker on hover */
+}
+
+.sidebarScroll::-webkit-scrollbar-track {
+  background: #f1f5f9; /* light gray background */
+  border-radius: 10px;
+}
