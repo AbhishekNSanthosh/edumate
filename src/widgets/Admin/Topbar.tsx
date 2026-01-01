@@ -1,7 +1,7 @@
 import Image from "next/image";
 import React, { useState, useRef, useEffect } from "react";
 import { IoIosNotificationsOutline } from "react-icons/io";
-import { FiSearch } from "react-icons/fi";
+import { FaSearch } from "react-icons/fa";
 import { collection, onSnapshot, query, orderBy, limit, doc, updateDoc, where } from "firebase/firestore";
 import { db } from "../../config/firebaseConfig";
 import toast from "react-hot-toast";
@@ -137,7 +137,7 @@ export default function Topbar() {
             <div className={`flex items-center bg-gray-50/80 hover:bg-white border text-gray-600 rounded-full px-5 py-2.5 w-[350px] transition-all duration-300 ease-in-out
                 ${searchResults.length > 0 || searchQuery ? 'bg-white shadow-lg ring-2 ring-blue-500/10 border-blue-100' : 'border-transparent hover:shadow-md hover:border-gray-200'}
             `}>
-                <FiSearch className={`mr-3 text-lg transition-colors ${searchResults.length > 0 ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
+                <FaSearch className={`mr-3 text-lg transition-colors ${searchResults.length > 0 ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
                 <input 
                     type="text" 
                     placeholder="Quick Search (e.g. 'Add Student')..." 
@@ -162,7 +162,7 @@ export default function Topbar() {
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-blue-100/50 text-blue-600 flex items-center justify-center text-xs group-hover:bg-blue-500 group-hover:text-white transition-all">
-                                        <FiSearch className="text-sm"/>
+                                        <FaSearch className="text-sm"/>
                                     </div>
                                     <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700 transition-colors">
                                         {result.title}
