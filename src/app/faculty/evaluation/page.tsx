@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../../context/AuthContext'
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore'
+import { db } from '../../../config/firebaseConfig'
+import toast from 'react-hot-toast'
 
 interface Assignment {
-  id: number;
+  id: string;
   student: string;
   regNumber: string;
   assignmentName: string;
@@ -11,77 +15,140 @@ interface Assignment {
   marks: number | null;
   maxMarks: number;
   status: 'pending' | 'evaluated' | 'late';
+  facultyId: string;
 }
 
 interface InternalMark {
-  id: number;
+  id: string;
   student: string;
   regNumber: string;
   subject: string;
   marks: number | null;
   maxMarks: number;
   status: 'entered' | 'pending';
+  facultyId: string;
 }
 
 interface ExamStatus {
-  id: number;
+  id: string;
   examName: string;
   batch: string;
   evaluatedStudents: number;
   totalStudents: number;
   status: 'in_progress' | 'completed' | 'pending';
+  facultyId: string;
 }
 
 interface StudentReport {
-  id: number;
+  id: string;
   student: string;
   regNumber: string;
   subject: string;
   overallGrade: string;
   cgpa: number;
   status: 'passed' | 'failed' | 'pending';
+  facultyId: string;
 }
 
 interface Deadline {
-  id: number;
+  id: string;
   evaluationType: string;
   dueDate: string;
   status: 'upcoming' | 'overdue' | 'completed';
+  facultyId: string;
 }
 
 export default function page() {
+  const { user } = useAuth()
+  const [loading, setLoading] = useState(true)
   const [selectedTab, setSelectedTab] = useState<'assignments' | 'internal' | 'exams' | 'reports' | 'grades' | 'deadlines'>('assignments')
 
-  // Sample data - in a real app, this would come from an API
-  const assignments: Assignment[] = [
-    { id: 1, student: 'John Doe', regNumber: '2022CSE001', assignmentName: 'Project Report', submittedDate: 'Dec 25, 2025', marks: null, maxMarks: 20, status: 'pending' },
-    { id: 2, student: 'Jane Smith', regNumber: '2023MATH001', assignmentName: 'Problem Set', submittedDate: 'Dec 28, 2025', marks: 18, maxMarks: 20, status: 'evaluated' },
-    { id: 3, student: 'Mike Wilson', regNumber: '2021PHYS001', assignmentName: 'Lab Report', submittedDate: 'Dec 20, 2025', marks: null, maxMarks: 20, status: 'late' },
-  ]
+  // Data States
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [internalMarks, setInternalMarks] = useState<InternalMark[]>([])
+  const [examStatuses, setExamStatuses] = useState<ExamStatus[]>([])
+  const [studentReports, setStudentReports] = useState<StudentReport[]>([])
+  const [deadlines, setDeadlines] = useState<Deadline[]>([])
 
-  const internalMarks: InternalMark[] = [
-    { id: 1, student: 'John Doe', regNumber: '2022CSE001', subject: 'Data Structures', marks: null, maxMarks: 25, status: 'pending' },
-    { id: 2, student: 'Jane Smith', regNumber: '2023MATH001', subject: 'Calculus II', marks: 22, maxMarks: 25, status: 'entered' },
-    { id: 3, student: 'Mike Wilson', regNumber: '2021PHYS001', subject: 'Physics Lab', marks: null, maxMarks: 25, status: 'pending' },
-  ]
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
 
-  const examStatuses: ExamStatus[] = [
-    { id: 1, examName: 'Midterm - Data Structures', batch: 'CSE 2022-26', evaluatedStudents: 20, totalStudents: 30, status: 'in_progress' },
-    { id: 2, examName: 'Final - Algorithms', batch: 'CSE 2023-27', evaluatedStudents: 28, totalStudents: 28, status: 'completed' },
-    { id: 3, examName: 'Quiz - Physics', batch: 'PHYS 2021-25', evaluatedStudents: 0, totalStudents: 25, status: 'pending' },
-  ]
+    // Fetch all collections in parallel (simplified for this view)
+    const unsubAssignments = onSnapshot(query(collection(db, 'evaluation_assignments'), where('facultyId', '==', user.uid)), (snap) => {
+        setAssignments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Assignment)));
+    });
 
-  const studentReports: StudentReport[] = [
-    { id: 1, student: 'John Doe', regNumber: '2022CSE001', subject: 'Data Structures', overallGrade: 'A', cgpa: 3.8, status: 'passed' },
-    { id: 2, student: 'Jane Smith', regNumber: '2023MATH001', subject: 'Calculus II', overallGrade: 'B+', cgpa: 3.5, status: 'passed' },
-    { id: 3, student: 'Mike Wilson', regNumber: '2021PHYS001', subject: 'Physics', overallGrade: 'C', cgpa: 2.7, status: 'passed' },
-  ]
+    const unsubInternals = onSnapshot(query(collection(db, 'evaluation_internals'), where('facultyId', '==', user.uid)), (snap) => {
+        setInternalMarks(snap.docs.map(d => ({ id: d.id, ...d.data() } as InternalMark)));
+    });
 
-  const deadlines: Deadline[] = [
-    { id: 1, evaluationType: 'Assignment Evaluation', dueDate: 'Jan 5, 2026', status: 'upcoming' },
-    { id: 2, evaluationType: 'Internal Marks Entry', dueDate: 'Jan 10, 2026', status: 'upcoming' },
-    { id: 3, evaluationType: 'Exam Valuation', dueDate: 'Dec 25, 2025', status: 'overdue' },
-  ]
+    const unsubExams = onSnapshot(query(collection(db, 'evaluation_exams'), where('facultyId', '==', user.uid)), (snap) => {
+        setExamStatuses(snap.docs.map(d => ({ id: d.id, ...d.data() } as ExamStatus)));
+    });
+
+    const unsubReports = onSnapshot(query(collection(db, 'evaluation_reports'), where('facultyId', '==', user.uid)), (snap) => {
+        setStudentReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentReport)));
+    });
+
+    const unsubDeadlines = onSnapshot(query(collection(db, 'evaluation_deadlines'), where('facultyId', '==', user.uid)), (snap) => {
+        setDeadlines(snap.docs.map(d => ({ id: d.id, ...d.data() } as Deadline)));
+        setLoading(false);
+    });
+
+    return () => {
+        unsubAssignments();
+        unsubInternals();
+        unsubExams();
+        unsubReports();
+        unsubDeadlines();
+    }
+  }, [user]);
+
+  const updateMark = async (collectionName: string, id: string, marks: number, maxMarks: number, type: 'assignment' | 'internal') => {
+      try {
+          if (marks > maxMarks) {
+              toast.error(`Marks cannot exceed ${maxMarks}`);
+              return;
+          }
+          await updateDoc(doc(db, collectionName, id), {
+              marks: marks,
+              status: type === 'assignment' ? 'evaluated' : 'entered'
+          });
+          toast.success("Marks updated");
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to update marks");
+      }
+  }
+
+  const seedData = async () => {
+      if (!user) return;
+      if (!confirm("This will add sample data to your evaluation dashboard. Continue?")) return;
+      
+      try {
+          // Seed Assignments
+          await addDoc(collection(db, 'evaluation_assignments'), {
+              facultyId: user.uid,
+              student: 'Alice Johnson', regNumber: '2023CSE001', assignmentName: 'React Project', submittedDate: '2025-12-20', marks: null, maxMarks: 20, status: 'pending'
+          });
+          await addDoc(collection(db, 'evaluation_assignments'), {
+              facultyId: user.uid,
+              student: 'Bob Smith', regNumber: '2023CSE002', assignmentName: 'React Project', submittedDate: '2025-12-21', marks: 18, maxMarks: 20, status: 'evaluated'
+          });
+
+          // Seed Internals
+          await addDoc(collection(db, 'evaluation_internals'), {
+              facultyId: user.uid,
+              student: 'Alice Johnson', regNumber: '2023CSE001', subject: 'Web Development', marks: null, maxMarks: 25, status: 'pending'
+          });
+          
+          toast.success("Sample data added!");
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to seed data");
+      }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -125,11 +192,11 @@ export default function page() {
           </button>
         ))}
       </div>
+      <button onClick={seedData} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors">
+         + Seed Test Data
+      </button>
       <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
         Submit All Grades
-      </button>
-      <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
-        Export Reports
       </button>
     </div>
   )
@@ -164,12 +231,13 @@ export default function page() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reg No</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignment</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks (/20)</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                  {assignments.length === 0 && <tr><td colSpan={7} className="px-6 py-4 text-center text-gray-500">No assignments found. Use 'Seed Test Data' to add sample.</td></tr>}
                   {assignments.map((assign) => (
                     <tr key={assign.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{assign.student}</td>
@@ -179,13 +247,13 @@ export default function page() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="number"
-                          value={assign.marks || ''}
-                          onChange={() => {}} // Handle change
+                          defaultValue={assign.marks || ''}
+                          onBlur={(e) => updateMark('evaluation_assignments', assign.id, parseFloat(e.target.value), assign.maxMarks, 'assignment')}
                           className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
                           placeholder="0"
                           max={assign.maxMarks}
                         />
-                        /{assign.maxMarks}
+                        <span className="text-sm text-gray-500 ml-1">/{assign.maxMarks}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(assign.status)}`}>
@@ -193,8 +261,7 @@ export default function page() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900">Evaluate</button>
-                        <button className="text-green-600 hover:text-green-900">Save</button>
+                        <button className="text-blue-600 hover:text-blue-900">View</button>
                       </td>
                     </tr>
                   ))}
@@ -216,10 +283,10 @@ export default function page() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks (/25)</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                  {internalMarks.length === 0 && <tr><td colSpan={5} className="px-6 py-4 text-center text-gray-500">No internal marks pending.</td></tr>}
                   {internalMarks.map((mark) => (
                     <tr key={mark.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{mark.student}</td>
@@ -228,21 +295,18 @@ export default function page() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="number"
-                          value={mark.marks || ''}
-                          onChange={() => {}} // Handle change
+                          defaultValue={mark.marks || ''}
+                          onBlur={(e) => updateMark('evaluation_internals', mark.id, parseFloat(e.target.value), mark.maxMarks, 'internal')}
                           className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
                           placeholder="0"
                           max={mark.maxMarks}
                         />
-                        /{mark.maxMarks}
+                        <span className="text-sm text-gray-500 ml-1">/{mark.maxMarks}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(mark.status)}`}>
                           {mark.status.charAt(0).toUpperCase() + mark.status.slice(1)}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button className="text-green-600 hover:text-green-900">Save</button>
                       </td>
                     </tr>
                   ))}
@@ -263,10 +327,10 @@ export default function page() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Evaluated / Total</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                  {examStatuses.length === 0 && <tr><td colSpan={4} className="px-6 py-4 text-center text-gray-500">No exams active.</td></tr>}
                   {examStatuses.map((exam) => (
                     <tr key={exam.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{exam.examName}</td>
@@ -276,10 +340,6 @@ export default function page() {
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(exam.status)}`}>
                           {exam.status.charAt(0).toUpperCase() + exam.status.slice(1)}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900">View Papers</button>
-                        <button className="text-green-600 hover:text-green-900">Start Evaluation</button>
                       </td>
                     </tr>
                   ))}
@@ -302,10 +362,10 @@ export default function page() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CGPA</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                  {studentReports.length === 0 && <tr><td colSpan={6} className="px-6 py-4 text-center text-gray-500">No reports available.</td></tr>}
                   {studentReports.map((report) => (
                     <tr key={report.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{report.student}</td>
@@ -317,10 +377,6 @@ export default function page() {
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(report.status)}`}>
                           {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900">View Report</button>
-                        <button className="text-green-600 hover:text-green-900">Download</button>
                       </td>
                     </tr>
                   ))}
@@ -348,10 +404,10 @@ export default function page() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Evaluation Type</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                  {deadlines.length === 0 && <tr><td colSpan={3} className="px-6 py-4 text-center text-gray-500">No deadlines.</td></tr>}
                   {deadlines.map((deadline) => (
                     <tr key={deadline.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{deadline.evaluationType}</td>
@@ -360,9 +416,6 @@ export default function page() {
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(deadline.status)}`}>
                           {deadline.status.charAt(0).toUpperCase() + deadline.status.slice(1)}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900">View Details</button>
                       </td>
                     </tr>
                   ))}

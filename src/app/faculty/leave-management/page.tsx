@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../../context/AuthContext'
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, setDoc, getDocs, Timestamp, orderBy } from 'firebase/firestore'
+import { db } from '../../../config/firebaseConfig'
+import toast from 'react-hot-toast'
 
 interface LeaveType {
-  id: number;
+  id: string;
   name: string;
   code: string;
   balance: number;
@@ -11,70 +15,179 @@ interface LeaveType {
 }
 
 interface LeaveApplication {
-  id: number;
+  id: string;
   type: string;
   fromDate: string;
   toDate: string;
   days: number;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   appliedDate: string;
   approvedBy: string;
+  createdAt: any;
 }
 
 export default function page() {
+  const { user } = useAuth()
   const [showApplyForm, setShowApplyForm] = useState(false)
   const [selectedType, setSelectedType] = useState('CL')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [days, setDays] = useState(0)
+  const [reason, setReason] = useState('')
+  
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
+  const [leaveHistory, setLeaveHistory] = useState<LeaveApplication[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Sample data - in a real app, this would come from an API
-  const leaveTypes: LeaveType[] = [
-    { id: 1, name: 'Casual Leave', code: 'CL', balance: 12, description: 'Personal reasons, max 3 consecutive days' },
-    { id: 2, name: 'Sick Leave', code: 'SL', balance: 10, description: 'Medical reasons with certificate' },
-    { id: 3, name: 'On Duty', code: 'OD', balance: 5, description: 'Official duty outside campus' },
-    { id: 4, name: 'Earned Leave', code: 'EL', balance: 20, description: 'Accumulated leave' },
-  ]
+  // Initialize Balances if not exist
+  const initializeBalances = async (uid: string) => {
+      const balanceRef = collection(db, 'leave_balances');
+      const q = query(balanceRef, where('facultyId', '==', uid));
+      const snapshot = await getDocs(q);
 
-  const leaveHistory: LeaveApplication[] = [
-    {
-      id: 1,
-      type: 'CL',
-      fromDate: 'Dec 20, 2025',
-      toDate: 'Dec 21, 2025',
-      days: 2,
-      reason: 'Family event',
-      status: 'approved',
-      appliedDate: 'Dec 15, 2025',
-      approvedBy: 'Dr. Alice Johnson',
-    },
-    {
-      id: 2,
-      type: 'SL',
-      fromDate: 'Nov 10, 2025',
-      toDate: 'Nov 12, 2025',
-      days: 3,
-      reason: 'Illness',
-      status: 'approved',
-      appliedDate: 'Nov 5, 2025',
-      approvedBy: 'Prof. Bob Smith',
-    },
-    {
-      id: 3,
-      type: 'OD',
-      fromDate: 'Dec 28, 2025',
-      toDate: 'Dec 28, 2025',
-      days: 1,
-      reason: 'Conference attendance',
-      status: 'pending',
-      appliedDate: 'Dec 25, 2025',
-      approvedBy: '',
-    },
-  ]
+      if (snapshot.empty) {
+          // Default balances
+          const defaults = [
+              { name: 'Casual Leave', code: 'CL', balance: 12, description: 'Personal reasons, max 3 consecutive days' },
+              { name: 'Sick Leave', code: 'SL', balance: 10, description: 'Medical reasons with certificate' },
+              { name: 'On Duty', code: 'OD', balance: 5, description: 'Official duty outside campus' },
+              { name: 'Earned Leave', code: 'EL', balance: 20, description: 'Accumulated leave' },
+          ];
+
+          for (const type of defaults) {
+              await addDoc(balanceRef, {
+                  ...type,
+                  facultyId: uid
+              });
+          }
+          toast.success("Initialized leave balances");
+      }
+  }
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+
+    // Check and initialize balances
+    initializeBalances(user.uid);
+
+    // Fetch Balances
+    const unsubBalances = onSnapshot(query(collection(db, 'leave_balances'), where('facultyId', '==', user.uid)), (snap) => {
+        setLeaveTypes(snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveType)));
+    });
+
+    // Fetch History
+    const unsubHistory = onSnapshot(query(
+        collection(db, 'faculty_leaves'), 
+        where('facultyId', '==', user.uid)
+    ), (snap) => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveApplication));
+        // Sort client-side to avoid needing a composite index
+        data.sort((a, b) => {
+            const timeA = a.createdAt?.seconds || 0;
+            const timeB = b.createdAt?.seconds || 0;
+            return timeB - timeA;
+        });
+        setLeaveHistory(data);
+        setLoading(false);
+    });
+
+    return () => {
+        unsubBalances();
+        unsubHistory();
+    }
+  }, [user]);
+
+  // Auto-calculate days
+  useEffect(() => {
+      if (fromDate && toDate) {
+          const start = new Date(fromDate);
+          const end = new Date(toDate);
+          const diffTime = Math.abs(end.getTime() - start.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
+          setDays(diffDays > 0 ? diffDays : 0);
+      } else {
+          setDays(0);
+      }
+  }, [fromDate, toDate]);
+
+  const handleApplyLeave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || days <= 0) return;
+
+    // Check balance
+    const type = leaveTypes.find(t => t.code === selectedType);
+    if (!type) return;
+
+    if (type.balance < days) {
+        toast.error(`Insufficient ${type.name} balance!`);
+        return;
+    }
+
+    try {
+        await addDoc(collection(db, 'faculty_leaves'), {
+            facultyId: user.uid,
+            type: selectedType,
+            fromDate,
+            toDate,
+            days,
+            reason,
+            status: 'pending',
+            appliedDate: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+            approvedBy: '',
+            createdAt: Timestamp.now()
+        });
+        
+        // Deduct balance tentatively or wait for approval? 
+        // Providing immediate feedback is better, but usually balance deducts on approval.
+        // For this demo, let's just log request. Real apps usually block balance on pending too.
+        
+        // Optimistically deduct balance (optional logic decision)
+        await updateDoc(doc(db, 'leave_balances', type.id), {
+            balance: type.balance - days
+        });
+
+        toast.success("Leave application submitted");
+        setShowApplyForm(false);
+        setReason('');
+        setFromDate('');
+        setToDate('');
+    } catch (error) {
+        console.error(error);
+        toast.error("Failed to apply");
+    }
+  }
+
+  const cancelLeave = async (leave: LeaveApplication) => {
+      try {
+          if (!confirm("Are you sure you want to cancel this leave application?")) return;
+          
+          await updateDoc(doc(db, 'faculty_leaves', leave.id), {
+              status: 'cancelled'
+          });
+
+          // Refund balance if it was deducted
+          const type = leaveTypes.find(t => t.code === leave.type);
+          if (type) {
+              await updateDoc(doc(db, 'leave_balances', type.id), {
+                  balance: type.balance + leave.days
+              });
+          }
+
+          toast.success("Leave cancelled");
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to cancel leave");
+      }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-green-100 text-green-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'rejected': return 'bg-red-100 text-red-800';
+      case 'cancelled': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   }
@@ -99,12 +212,6 @@ export default function page() {
   const totalBalance = leaveTypes.reduce((sum, type) => sum + type.balance, 0)
   const pendingApplications = leaveHistory.filter(l => l.status === 'pending').length
   const approvedLeaves = leaveHistory.filter(l => l.status === 'approved').length
-
-  const handleApplyLeave = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Simulate submission
-    setShowApplyForm(false)
-  }
 
   return (
     <div className="mt-[100px] p-6 bg-gray-50 min-h-screen">
@@ -142,6 +249,9 @@ export default function page() {
                     <td className="px-6 py-4 text-sm text-gray-900">{type.description}</td>
                   </tr>
                 ))}
+                {leaveTypes.length === 0 && !loading && (
+                    <tr><td colSpan={4} className="px-6 py-4 text-center text-gray-500">Initializing balances...</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -169,7 +279,10 @@ export default function page() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
                   <input
                     type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    required
                   />
                 </div>
               </div>
@@ -178,13 +291,18 @@ export default function page() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
                   <input
                     type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    required
+                    min={fromDate}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Days</label>
                   <input
                     type="number"
+                    value={days}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Auto-calculated"
                     disabled
@@ -194,14 +312,18 @@ export default function page() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
                 <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   rows={3}
                   placeholder="Enter reason for leave"
+                  required
                 />
               </div>
               <button
                 type="submit"
                 className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                disabled={days <= 0}
               >
                 Submit Application
               </button>
@@ -229,6 +351,7 @@ export default function page() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
+                {leaveHistory.length === 0 && <tr><td colSpan={8} className="px-6 py-4 text-center text-gray-500">No leave history found.</td></tr>}
                 {leaveHistory.map((leave) => (
                   <tr key={leave.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{leave.type}</td>
@@ -241,10 +364,17 @@ export default function page() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{leave.appliedDate}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{leave.approvedBy || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{leave.approvedBy || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button className="text-blue-600 hover:text-blue-900">View</button>
-                      {leave.status === 'pending' && <button className="text-yellow-600 hover:text-yellow-900">Cancel</button>}
+                      {leave.status === 'pending' && (
+                        <button 
+                            onClick={() => cancelLeave(leave)}
+                            className="text-red-600 hover:text-red-900"
+                        >
+                            Cancel
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

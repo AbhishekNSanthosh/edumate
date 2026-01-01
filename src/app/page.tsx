@@ -1,5 +1,6 @@
 "use client"
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import React from 'react'
 
@@ -31,14 +32,15 @@ export default function Home() {
         {/* Role Selection */}
         <div className="grid grid-cols-2 gap-4">
           {roles.map((role) => (
-            <button
+            <Link
+            href={`/${role.id}-login`}
               key={role.id}
-              onClick={() => handleRoleSelect(role.id)}
+             
               className={`p-6 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 bg-white border-2 border-gray-200 hover:border-[#1f75fe] hover:shadow-[#1f75fe]/10`}
             >
               <div className="text-3xl mb-3">{role.icon}</div>
               <div className="text-lg font-semibold text-gray-800">{role.label}</div>
-            </button>
+            </Link>
           ))}
         </div>
 

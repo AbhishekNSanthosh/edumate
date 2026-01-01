@@ -1,68 +1,65 @@
 "use client"
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { collection, onSnapshot, deleteDoc, doc } from 'firebase/firestore'
+import { db } from '../../../config/firebaseConfig'
+import Link from 'next/link'
+import toast from 'react-hot-toast'
+import * as XLSX from 'xlsx'
 
-export default function page() {
-  // Sample data - in a real app, this would come from an API
-  const faculties = [
-    {
-      id: 'FAC001',
-      name: 'Dr. Alice Johnson',
-      email: 'alice.johnson@uni.edu',
-      phone: '+1 (555) 123-4567',
-      department: 'Computer Science',
-      designation: 'Professor',
-      subjects: ['Data Structures', 'Algorithms'],
-      batches: ['Batch A-2025', 'Batch B-2025'],
-      role: 'Faculty',
-      accessStatus: 'active',
-      lastLogin: '2025-12-29 10:30 AM',
-    },
-    {
-      id: 'FAC002',
-      name: 'Prof. Bob Smith',
-      email: 'bob.smith@uni.edu',
-      phone: '+1 (555) 987-6543',
-      department: 'Mathematics',
-      designation: 'Associate Professor',
-      subjects: ['Calculus I', 'Linear Algebra'],
-      batches: ['Batch C-2025'],
-      role: 'Coordinator',
-      accessStatus: 'active',
-      lastLogin: '2025-12-30 09:15 AM',
-    },
-    {
-      id: 'FAC003',
-      name: 'Ms. Carol Davis',
-      email: 'carol.davis@uni.edu',
-      phone: '+1 (555) 456-7890',
-      department: 'Physics',
-      designation: 'Tutor',
-      subjects: ['Physics Lab'],
-      batches: [],
-      role: 'Tutor',
-      accessStatus: 'inactive',
-      lastLogin: '2025-12-20 14:45 PM',
-    },
-    {
-      id: 'FAC004',
-      name: 'Dr. David Wilson',
-      email: 'david.wilson@uni.edu',
-      phone: '+1 (555) 321-0987',
-      department: 'Economics',
-      designation: 'Assistant Professor',
-      subjects: ['Microeconomics', 'Macroeconomics'],
-      batches: ['Batch D-2025', 'Batch E-2025'],
-      role: 'Faculty',
-      accessStatus: 'active',
-      lastLogin: '2025-12-30 11:20 AM',
-    },
-  ]
+export default function FacultyPage() {
+  const [faculties, setFaculties] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "faculty"), (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        setFaculties(list)
+        setLoading(false)
+    }, (error) => {
+        console.error(error)
+        toast.error("Failed to load faculty")
+        setLoading(false)
+    })
+    return () => unsub()
+  }, [])
+
+  const handleDelete = async (id: string) => {
+    if(!confirm("Are you sure you want to delete this faculty member?")) return;
+    try {
+        await deleteDoc(doc(db, "faculty", id))
+        toast.success("Faculty deleted")
+    } catch (error) {
+        toast.error("Failed to delete")
+    }
+  }
+
+  const handleExport = () => {
+     if (faculties.length === 0) {
+         toast.error("No data to export");
+         return;
+     }
+     const wb = XLSX.utils.book_new();
+     const ws = XLSX.utils.json_to_sheet(faculties.map(f => ({
+         UID: f.uid,
+         Name: f.name,
+         Email: f.email,
+         Phone: f.phone,
+         Department: f.department,
+         Designation: f.designation,
+         Role: f.role,
+         Status: f.accessStatus
+     })));
+     XLSX.utils.book_append_sheet(wb, ws, "Faculty");
+     XLSX.writeFile(wb, "faculty_data.xlsx");
+     toast.success("Export successful!");
+   }
 
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'Faculty': return 'bg-blue-100 text-blue-800';
       case 'Tutor': return 'bg-green-100 text-green-800';
       case 'Coordinator': return 'bg-purple-100 text-purple-800';
+      case 'HOD': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   }
@@ -71,17 +68,9 @@ export default function page() {
     return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
   }
 
-  const QuickActions = () => (
-    <div className="flex space-x-4 mb-6">
-      <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-        Add New Faculty
-      </button>
-      <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
-        Export Data
-      </button>
-      <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-        Reset Credentials
-      </button>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
     </div>
   )
 
@@ -95,17 +84,32 @@ export default function page() {
         </div>
 
         {/* Quick Actions */}
-        <QuickActions />
+        <div className="flex space-x-4 mb-6">
+            <Link href="/admin/faculty/add">
+                <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                    Add New Faculty
+                </button>
+            </Link>
+            <button 
+                onClick={handleExport}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+                Export Data
+            </button>
+        </div>
 
         {/* Faculty Table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
+         {faculties.length === 0 ? (
+             <div className="p-8 text-center text-gray-500">
+                No faculty found. Add one to get started.
+             </div>
+          ) : (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID & Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department / Designation</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subjects Handled</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Batches</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Access Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
@@ -116,7 +120,7 @@ export default function page() {
               {faculties.map((faculty) => (
                 <tr key={faculty.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{faculty.id}</div>
+                    <div className="text-sm font-medium text-gray-900">{faculty.uid}</div>
                     <div className="text-sm text-gray-500">{faculty.name}</div>
                     <div className="text-xs text-gray-400">{faculty.email}</div>
                   </td>
@@ -124,42 +128,25 @@ export default function page() {
                     <div className="text-sm text-gray-900">{faculty.department}</div>
                     <div className="text-sm text-gray-500">{faculty.designation}</div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{faculty.subjects.slice(0, 2).join(', ')}</div>
-                    <div className="text-xs text-gray-500">
-                      {faculty.subjects.length > 2 ? `+${faculty.subjects.length - 2} more` : `${faculty.subjects.length} total`}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{faculty.batches.slice(0, 2).join(', ')}</div>
-                    <div className="text-xs text-gray-500">
-                      {faculty.batches.length > 2 ? `+${faculty.batches.length - 2} more` : `${faculty.batches.length} total`}
-                    </div>
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{faculty.phone}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(faculty.accessStatus)}`}>
-                      {faculty.accessStatus.charAt(0).toUpperCase() + faculty.accessStatus.slice(1)}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(faculty.accessStatus || 'active')}`}>
+                      {(faculty.accessStatus || 'active').charAt(0).toUpperCase() + (faculty.accessStatus || 'active').slice(1)}
                     </span>
-                    <div className="text-xs text-gray-400 mt-1">Last Login: {faculty.lastLogin}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(faculty.role)}`}>
-                      {faculty.role}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(faculty.role || 'Faculty')}`}>
+                      {faculty.role || 'Faculty'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button className="text-blue-600 hover:text-blue-900">View</button>
-                    <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                    <button className="text-green-600 hover:text-green-900">Assign Subject</button>
-                    <button className={`text-${faculty.accessStatus === 'active' ? 'red' : 'green'}-600 hover:text-${faculty.accessStatus === 'active' ? 'red' : 'green'}-900`}>
-                      {faculty.accessStatus === 'active' ? 'Deactivate' : 'Activate'}
-                    </button>
+                    <button onClick={() => handleDelete(faculty.id)} className="text-red-600 hover:text-red-900">Delete</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          )}
         </div>
 
         {/* Summary Stats */}

@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../../context/AuthContext'
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, Timestamp, orderBy } from 'firebase/firestore'
+import { db } from '../../../config/firebaseConfig'
+import toast from 'react-hot-toast'
 
 interface LeaveApplication {
-  id: number;
+  id: string;
   student: string;
   regNumber: string;
   type: string;
@@ -13,107 +17,100 @@ interface LeaveApplication {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   appliedDate: string;
-}
-
-interface LeaveHistory {
-  id: number;
-  student: string;
-  regNumber: string;
-  type: string;
-  fromDate: string;
-  toDate: string;
-  days: number;
-  reason: string;
-  status: 'approved' | 'rejected';
-  approvedDate: string;
-  approvedBy: string;
+  createdAt: any;
+  approvedDate?: string;
+  approvedBy?: string;
 }
 
 export default function page() {
-  const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
+  const { user } = useAuth()
+  const [selectedStudent, setSelectedStudent] = useState<string>('')
   const [viewMode, setViewMode] = useState<'pending' | 'history'>('pending')
+  const [applications, setApplications] = useState<LeaveApplication[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Sample data - in a real app, this would come from an API
-  const pendingApplications: LeaveApplication[] = [
-    {
-      id: 1,
-      student: 'John Doe',
-      regNumber: '2022CSE001',
-      type: 'Casual Leave',
-      fromDate: 'Jan 5, 2026',
-      toDate: 'Jan 6, 2026',
-      days: 2,
-      reason: 'Family event',
-      status: 'pending',
-      appliedDate: 'Dec 30, 2025',
-    },
-    {
-      id: 2,
-      student: 'Jane Smith',
-      regNumber: '2023MATH001',
-      type: 'Sick Leave',
-      fromDate: 'Jan 8, 2026',
-      toDate: 'Jan 8, 2026',
-      days: 1,
-      reason: 'Illness',
-      status: 'pending',
-      appliedDate: 'Dec 30, 2025',
-    },
-    {
-      id: 3,
-      student: 'Mike Wilson',
-      regNumber: '2021PHYS001',
-      type: 'On Duty',
-      fromDate: 'Jan 10, 2026',
-      toDate: 'Jan 10, 2026',
-      days: 1,
-      reason: 'Conference attendance',
-      status: 'pending',
-      appliedDate: 'Dec 29, 2025',
-    },
-  ]
+  useEffect(() => {
+    // For now, fetching all student leaves. In a real app, you might filter by department or mentorship
+    const q = query(collection(db, 'student_leaves')); // orderBy requires index, doing client-side sort
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as LeaveApplication));
 
-  const leaveHistories: LeaveHistory[] = [
-    {
-      id: 1,
-      student: 'John Doe',
-      regNumber: '2022CSE001',
-      type: 'Casual Leave',
-      fromDate: 'Dec 20, 2025',
-      toDate: 'Dec 21, 2025',
-      days: 2,
-      reason: 'Family event',
-      status: 'approved',
-      approvedDate: 'Dec 18, 2025',
-      approvedBy: 'Dr. Alice Johnson',
-    },
-    {
-      id: 2,
-      student: 'Jane Smith',
-      regNumber: '2023MATH001',
-      type: 'Sick Leave',
-      fromDate: 'Nov 10, 2025',
-      toDate: 'Nov 12, 2025',
-      days: 3,
-      reason: 'Illness',
-      status: 'approved',
-      approvedDate: 'Nov 8, 2025',
-      approvedBy: 'Prof. Bob Smith',
-    },
-    {
-      id: 3,
-      student: 'Mike Wilson',
-      regNumber: '2021PHYS001',
-      type: 'On Duty',
-      fromDate: 'Oct 15, 2025',
-      toDate: 'Oct 15, 2025',
-      days: 1,
-      reason: 'Workshop',
-      status: 'rejected',
-      approvedDate: 'Oct 14, 2025',
-      approvedBy: 'Dr. Carol Davis',
-    },
-  ]
+        // Client-side sort
+        data.sort((a, b) => {
+             const timeA = a.createdAt?.seconds || 0;
+             const timeB = b.createdAt?.seconds || 0;
+             return timeB - timeA;
+        });
+
+        setApplications(data);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleApprove = async (id: string) => {
+    try {
+        await updateDoc(doc(db, 'student_leaves', id), {
+            status: 'approved',
+            approvedDate: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+            approvedBy: user?.displayName || 'Faculty'
+        });
+        toast.success("Leave approved");
+    } catch (error) {
+        console.error(error);
+        toast.error("Failed to approve");
+    }
+  }
+
+  const handleReject = async (id: string) => {
+    try {
+        await updateDoc(doc(db, 'student_leaves', id), {
+            status: 'rejected',
+            approvedDate: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+            approvedBy: user?.displayName || 'Faculty'
+        });
+        toast.success("Leave rejected");
+    } catch (error) {
+        console.error(error);
+        toast.error("Failed to reject");
+    }
+  }
+
+  const handleNotify = (student: string) => {
+    // Simulate notification
+    toast.success(`Notification sent to ${student}`);
+  }
+
+  const addTestData = async () => {
+      try {
+          const sample = {
+            student: 'Test Student ' + Math.floor(Math.random() * 100),
+            regNumber: `2024CSE${Math.floor(Math.random() * 100)}`,
+            type: 'Sick Leave',
+            fromDate: '2026-01-10',
+            toDate: '2026-01-12',
+            days: 3,
+            reason: 'Fever and cold',
+            status: 'pending',
+            appliedDate: new Date().toLocaleDateString(),
+            createdAt: Timestamp.now()
+          };
+          await addDoc(collection(db, 'student_leaves'), sample);
+          toast.success("Test leave request added");
+      } catch (e) {
+          console.error(e);
+          toast.error("Failed to add test data");
+      }
+  }
+
+  // Filter Data
+  const pendingApplications = applications.filter(app => app.status === 'pending');
+  const leaveHistories = applications.filter(app => ['approved', 'rejected'].includes(app.status));
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -122,21 +119,6 @@ export default function page() {
       case 'rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
-  }
-
-  const handleApprove = (id: number) => {
-    // Simulate approval
-    console.log('Approved:', id)
-  }
-
-  const handleReject = (id: number) => {
-    // Simulate rejection
-    console.log('Rejected:', id)
-  }
-
-  const handleNotify = (student: string) => {
-    // Simulate notification
-    console.log('Notified:', student)
   }
 
   const QuickActions = () => (
@@ -159,6 +141,11 @@ export default function page() {
       </button>
       <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
         Export Records
+      </button>
+      <button 
+        onClick={addTestData}
+        className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors ml-auto">
+        + Seed Test Data
       </button>
     </div>
   )
@@ -200,6 +187,8 @@ export default function page() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                  {loading && <tr><td colSpan={8} className="text-center p-4">Loading...</td></tr>}
+                  {!loading && pendingApplications.length === 0 && <tr><td colSpan={8} className="text-center p-4">No pending applications</td></tr>}
                   {pendingApplications.map((app) => (
                     <tr key={app.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{app.student}</td>
@@ -239,12 +228,13 @@ export default function page() {
           <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Leave History</h2>
-              <div className="flex space-x-4 mb-4">
+              <div className="flex space-x-4 mb-4 mt-2">
                 <input
                   type="text"
                   placeholder="Search by student name or reg number"
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 w-full md:w-64"
                   onChange={(e) => setSelectedStudent(e.target.value)}
+                  value={selectedStudent}
                 />
               </div>
             </div>
@@ -265,6 +255,8 @@ export default function page() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
+                   {loading && <tr><td colSpan={10} className="text-center p-4">Loading...</td></tr>}
+                   {!loading && leaveHistories.length === 0 && <tr><td colSpan={10} className="text-center p-4">No history records found</td></tr>}
                   {leaveHistories
                     .filter(history => !selectedStudent || history.student.toLowerCase().includes(selectedStudent.toLowerCase()) || history.regNumber.toLowerCase().includes(selectedStudent.toLowerCase()))
                     .map((history) => (
@@ -280,8 +272,8 @@ export default function page() {
                             {history.status.charAt(0).toUpperCase() + history.status.slice(1)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{history.approvedDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{history.approvedBy}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{history.approvedDate || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{history.approvedBy || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                           <button className="text-blue-600 hover:text-blue-900">View Details</button>
                           <button

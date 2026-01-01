@@ -1,354 +1,355 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../../../context/AuthContext";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { db } from "../../../config/firebaseConfig";
+import toast from "react-hot-toast";
 
-interface PersonalInfo {
-  fullName: string;
-  studentId: string;
+interface ParentProfile {
+  name: string;
   email: string;
   phone: string;
-  address1: string;
-  address2: string;
-  city: string;
-  state: string;
-  zip: string;
-  country: string;
+  address: string;
+  occupation: string;
+  relationship: string;
+  studentName: string;
+  studentId: string;
+  photoUrl?: string;
 }
 
-interface Passwords {
-  current: string;
-  new: string;
-  confirm: string;
-}
+export default function MyProfile() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [parentData, setParentData] = useState<ParentProfile>({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    occupation: "",
+    relationship: "",
+    studentName: "",
+    studentId: "",
+  });
 
-export default function ProfileSettings() {
-  // Initial state
-  const initialPersonalInfo: PersonalInfo = {
-    fullName: "Aisha Sharma",
-    studentId: "SCU01023",
-    email: "aisha.sharma@example.edu",
-    phone: "+91 9876543210",
-    address1: "Room 405, University Hostel A",
-    address2: "123 University Road",
-    city: "Mumbai",
-    state: "Maharashtra",
-    zip: "400001",
-    country: "India",
-  };
-
-  // State for personal information
-  const [personalInfo, setPersonalInfo] = useState<PersonalInfo>(initialPersonalInfo);
-
-  // State for password fields
-  const [passwords, setPasswords] = useState<Passwords>({
+  const [passwords, setPasswords] = useState({
     current: "",
     new: "",
     confirm: "",
   });
 
-  // State for email notifications
-  const [emailNotifications, setEmailNotifications] = useState<boolean>(true);
+  useEffect(() => {
+    const fetchProfile = async () => {
+        if (!user) return;
+        try {
+            setLoading(true);
+            // 1. Fetch Student Data (for reference)
+            const studentDoc = await getDoc(doc(db, "students", user.uid));
+            const sData = studentDoc.exists() ? studentDoc.data() : {};
 
-  // State for profile photo
-  const [profilePhoto, setProfilePhoto] = useState<string>("https://via.placeholder.com/80");
+            // 2. Fetch Parent Data
+            const parentDocRef = doc(db, "parents", user.uid);
+            const parentDoc = await getDoc(parentDocRef);
+            
+            if (parentDoc.exists()) {
+                const pData = parentDoc.data();
+                setParentData({
+                    name: pData.name || "",
+                    email: pData.email || user.email || "",
+                    phone: pData.phone || "",
+                    address: pData.address || "",
+                    occupation: pData.occupation || "",
+                    relationship: pData.relationship || "Parent",
+                    studentName: sData.name || "Student",
+                    studentId: sData.regNumber || "",
+                    photoUrl: pData.photoUrl || "",
+                });
+            } else {
+                 // Fallback if no parent doc exists yet (should exist from creation, but safety)
+                 setParentData({
+                    name: "",
+                    email: user.email || "",
+                    phone: "",
+                    address: "",
+                    occupation: "",
+                    relationship: "Parent",
+                    studentName: sData.name || "Student",
+                    studentId: sData.regNumber || "",
+                 });
+            }
+        } catch (error) {
+            console.error("Error fetching profile", error);
+            toast.error("Failed to load profile");
+        } finally {
+            setLoading(false);
+        }
+    };
+    fetchProfile();
+  }, [user]);
 
-  // Error states
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Handlers for personal info changes
-  const handlePersonalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setPersonalInfo((prev) => ({ ...prev, [name]: value }));
-    // Clear error if fixed
-    if (errors[name as keyof PersonalInfo]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
+    setParentData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handlers for password changes
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setPasswords((prev) => ({ ...prev, [name]: value }));
-    // Clear error if fixed
-    if (errors[name as keyof Passwords]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
-  };
-
-  // Handler for email notifications toggle
-  const handleToggle = () => {
-    setEmailNotifications((prev) => !prev);
+    setPasswords(prev => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("File too large. Max 5MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File details too large (max 2MB)");
       return;
     }
 
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === "string") {
-        setProfilePhoto(reader.result);
+        setParentData(prev => ({ ...prev, photoUrl: reader.result as string }));
       }
     };
     reader.readAsDataURL(file);
   };
 
-  // Handler for remove photo
-  const handleRemovePhoto = () => {
-    setProfilePhoto("https://via.placeholder.com/80?text=No+Photo");
-  };
-
-  // Enhanced password validation
-  const validatePasswords = (): string[] => {
-    const errors: string[] = [];
-    if (passwords.new && passwords.new.length < 8) {
-      errors.push("New password must be at least 8 characters.");
-    }
-    if (passwords.new !== passwords.confirm) {
-      errors.push("Passwords must match.");
-    }
-    return errors;
-  };
-
-  // Form validation
-  const validateForm = (): boolean => {
-    const passwordErrors = validatePasswords();
-    if (passwordErrors.length > 0) {
-      setErrors({ ...errors, ...{ new: passwordErrors[0], confirm: passwordErrors[0] } });
-      return false;
-    }
-    return true;
-  };
-
-  // Form submit handler
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
-      return;
+    if (!user) return;
+    setSaving(true);
+    const toastId = toast.loading("Saving changes...");
+
+    try {
+        // 1. Update Firestore Profile
+        await updateDoc(doc(db, "parents", user.uid), {
+            name: parentData.name,
+            email: parentData.email,
+            phone: parentData.phone,
+            address: parentData.address,
+            occupation: parentData.occupation,
+            relationship: parentData.relationship,
+            photoUrl: parentData.photoUrl
+        });
+
+        // 2. Handle Password Change (if provided)
+        if (passwords.new) {
+            if (passwords.new !== passwords.confirm) {
+                toast.error("New passwords do not match", { id: toastId });
+                setSaving(false);
+                return;
+            }
+            if (passwords.new.length < 6) {
+                toast.error("Password too short", { id: toastId });
+                setSaving(false);
+                return;
+            }
+            if (!passwords.current) {
+                toast.error("Current password required to change password", { id: toastId });
+                setSaving(false);
+                return;
+            }
+
+            // Re-authenticate
+            const credential = EmailAuthProvider.credential(user.email!, passwords.current);
+            await reauthenticateWithCredential(user, credential);
+            
+            // Update
+            await updatePassword(user, passwords.new);
+            setPasswords({ current: "", new: "", confirm: "" });
+            toast.success("Profile & Password Updated!", { id: toastId });
+        } else {
+            toast.success("Profile Updated!", { id: toastId });
+        }
+
+    } catch (error: any) {
+        console.error("Update error", error);
+        if (error.code === 'auth/wrong-password') {
+             toast.error("Incorrect current password", { id: toastId });
+        } else {
+             toast.error("Failed to update profile", { id: toastId });
+        }
+    } finally {
+        setSaving(false);
     }
-    // Simulate save (in real app, send to API)
-    console.log("Saving changes:", {
-      personalInfo,
-      passwords,
-      emailNotifications,
-      profilePhoto,
-    });
-    alert("Changes saved successfully!");
   };
 
-  // Cancel handler
-  const handleCancel = () => {
-    setPersonalInfo(initialPersonalInfo);
-    setPasswords({ current: "", new: "", confirm: "" });
-    setEmailNotifications(true);
-    setProfilePhoto("https://via.placeholder.com/80");
-    setErrors({});
-  };
-
-  const hasPasswordChanges = passwords.current.length > 0 || passwords.new.length > 0 || passwords.confirm.length > 0;
-  const isPasswordValid = !hasPasswordChanges || (passwords.new.length >= 8 && passwords.new === passwords.confirm);
+  if (loading) return <div className="mt-[100px] flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>;
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col mt-[80px]">
-      <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-between">
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          {/* Page Header */}
-          <div className="mx-auto">
-            <h1 className="text-2xl font-bold mb-2">Profile Settings</h1>
-            <p className="text-gray-500 mb-6">Manage your personal information and account preferences.</p>
-
-            {/* Profile Photo */}
-            <section className="bg-white border rounded-lg p-6 mb-6 shadow-sm" aria-labelledby="photo-heading">
-              <h2 id="photo-heading" className="font-semibold mb-2 sr-only">Your Profile Photo</h2>
-              <p className="text-sm text-gray-500 mb-4">Update your profile picture. Max file size 5MB.</p>
-              <div className="flex items-center space-x-4">
-                <img
-                 src={"/assets/profile.png"}
-                  alt="Current profile photo"
-                  className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
-                />
-                <div className="space-x-2 flex flex-col sm:flex-row">
-                  <label
-                    htmlFor="photo-upload"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm cursor-pointer inline-block hover:bg-blue-700 transition-colors"
-                  >
-                    Upload New Photo
-                  </label>
-                  <input
-                    id="photo-upload"
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                    aria-describedby="photo-help"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleRemovePhoto}
-                    className="px-4 py-2 bg-red-100 text-red-600 rounded-lg text-sm hover:bg-red-200 transition-colors"
-                    aria-label="Remove current profile photo"
-                  >
-                    Remove Photo
-                  </button>
+    <div className="min-h-screen bg-gray-50 flex flex-col mt-[80px] p-6 mb-[50px]">
+      <div className="max-w-4xl mx-auto w-full">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Parent Profile</h1>
+                    <p className="text-gray-500 text-sm">Manage your contact information and linked student details.</p>
                 </div>
-              </div>
-              <p id="photo-help" className="text-xs text-gray-500 mt-2">Recommended size: 80x80 pixels.</p>
-            </section>
+            </div>
 
-            {/* Personal Information */}
-            <section className="bg-white border rounded-lg p-6 mb-6 shadow-sm" aria-labelledby="personal-heading">
-              <h2 id="personal-heading" className="font-semibold mb-2">Personal Information</h2>
-              <p className="text-sm text-gray-500 mb-4">Manage your basic personal details.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.entries(personalInfo).map(([key, value]) => {
-                  const labelText = key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
-                  const required = !['address2'].includes(key);
-                  const id = `personal-${key}`;
-                  return (
-                    <div key={key}>
-                      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-                        {labelText}
-                      </label>
-                      <input
-                        id={id}
-                        type={key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'}
-                        name={key}
-                        value={value}
-                        onChange={handlePersonalChange}
-                        className={`w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                          errors[key as keyof PersonalInfo] ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        required={required}
-                        aria-invalid={!!errors[key as keyof PersonalInfo]}
-                        aria-describedby={errors[key as keyof PersonalInfo] ? `${id}-error` : undefined}
-                      />
-                      {errors[key as keyof PersonalInfo] && (
-                        <p id={`${id}-error`} className="text-sm text-red-600 mt-1">{errors[key as keyof PersonalInfo]}</p>
-                      )}
+            <form onSubmit={handleSubmit} className="p-6 space-y-8">
+                {/* Photo & Basic Info */}
+                <div className="flex flex-col md:flex-row gap-8 items-start">
+                    <div className="flex flex-col items-center space-y-3">
+                         <div className="relative w-32 h-32 rounded-full border-4 border-gray-100 shadow overflow-hidden bg-gray-200">
+                            {parentData.photoUrl ? (
+                                <img src={parentData.photoUrl} alt="Profile" className="w-full h-full object-cover"/>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-4xl text-gray-400 font-bold">
+                                    {parentData.name ? parentData.name.charAt(0).toUpperCase() : "P"}
+                                </div>
+                            )}
+                         </div>
+                         <label className="cursor-pointer text-sm text-blue-600 font-medium hover:text-blue-700">
+                             Change Photo
+                             <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload}/>
+                         </label>
                     </div>
-                  );
-                })}
-              </div>
-            </section>
 
-            {/* Account Security */}
-            <section className="bg-white border rounded-lg p-6 mb-6 shadow-sm" aria-labelledby="security-heading">
-              <h2 id="security-heading" className="font-semibold mb-2">Account Security</h2>
-              <p className="text-sm text-gray-500 mb-4">Update your password to keep your account secure.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Password
-                  </label>
-                  <input
-                    id="current-password"
-                    type="password"
-                    name="current"
-                    value={passwords.current}
-                    onChange={handlePasswordChange}
-                    placeholder="Enter current password"
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required={hasPasswordChanges}
-                  />
+                    <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Parent Name</label>
+                             <input
+                                name="name"
+                                value={parentData.name}
+                                onChange={handleChange}
+                                placeholder="Your Full Name"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                             />
+                         </div>
+                         <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
+                             <input
+                                name="occupation"
+                                value={parentData.occupation}
+                                onChange={handleChange}
+                                placeholder="e.g. Engineer"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                             />
+                         </div>
+                         <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Relationship to Student</label>
+                             <select
+                                name="relationship"
+                                value={parentData.relationship}
+                                onChange={handleChange}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                             >
+                                 <option value="Father">Father</option>
+                                 <option value="Mother">Mother</option>
+                                 <option value="Guardian">Guardian</option>
+                                 <option value="Other">Other</option>
+                             </select>
+                         </div>
+                         <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
+                             <input
+                                name="phone"
+                                value={parentData.phone}
+                                onChange={handleChange}
+                                type="tel"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                             />
+                         </div>
+                         <div className="md:col-span-2">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Email Address (Login)</label>
+                             <div className="flex items-center gap-2">
+                                <input
+                                    name="email"
+                                    value={parentData.email}
+                                    readOnly
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+                                />
+                                <span className="text-xs text-gray-400 shrink-0">Controlled by Student ID</span>
+                             </div>
+                         </div>
+                         <div className="md:col-span-2">
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Residential Address</label>
+                             <textarea
+                                name="address"
+                                value={parentData.address}
+                                onChange={handleChange}
+                                rows={3}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                             ></textarea>
+                         </div>
+                    </div>
                 </div>
-                <div>
-                  <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">
-                    New Password
-                  </label>
-                  <input
-                    id="new-password"
-                    type="password"
-                    name="new"
-                    value={passwords.new}
-                    onChange={handlePasswordChange}
-                    placeholder="Enter new password (min 8 characters)"
-                    className={`w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.new ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    required={hasPasswordChanges}
-                    aria-invalid={!!errors.new}
-                    aria-describedby={errors.new ? 'new-password-error' : undefined}
-                  />
-                  {errors.new && <p id="new-password-error" className="text-sm text-red-600 mt-1">{errors.new}</p>}
-                </div>
-                <div className="md:col-span-2">
-                  <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
-                    Confirm New Password
-                  </label>
-                  <input
-                    id="confirm-password"
-                    type="password"
-                    name="confirm"
-                    value={passwords.confirm}
-                    onChange={handlePasswordChange}
-                    placeholder="Confirm new password"
-                    className={`w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.confirm ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    required={hasPasswordChanges}
-                    aria-invalid={!!errors.confirm}
-                    aria-describedby={errors.confirm ? 'confirm-password-error' : undefined}
-                  />
-                  {errors.confirm && <p id="confirm-password-error" className="text-sm text-red-600 mt-1">{errors.confirm}</p>}
-                </div>
-              </div>
-            </section>
 
-            {/* Privacy Settings */}
-            <section className="bg-white border rounded-lg p-6 mb-6 shadow-sm" aria-labelledby="privacy-heading">
-              <h2 id="privacy-heading" className="font-semibold mb-2">Privacy Settings</h2>
-              <p className="text-sm text-gray-500 mb-4">Control how we communicate with you.</p>
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <span className="font-medium block" id="notification-label">Email Notifications</span>
-                  <p className="text-sm text-gray-500" aria-describedby="notification-label">
-                    Receive updates, announcements, and reminders via email.
-                  </p>
+                <hr className="border-gray-100"/>
+
+                {/* Linked Student Info (Read Only) */}
+                <div>
+                     <h2 className="text-lg font-semibold text-gray-900 mb-4">Linked Student Information</h2>
+                     <div className="bg-blue-50 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-blue-100">
+                         <div>
+                             <p className="text-sm text-blue-800 font-medium">Student Name</p>
+                             <p className="text-lg font-bold text-gray-900">{parentData.studentName}</p>
+                         </div>
+                         <div>
+                             <p className="text-sm text-blue-800 font-medium">Register Number</p>
+                             <p className="text-lg font-bold text-gray-900">{parentData.studentId}</p>
+                         </div>
+                         <div className="bg-white px-3 py-1 rounded border border-blue-200 text-xs text-blue-600">
+                             Verified Link
+                         </div>
+                     </div>
                 </div>
-                <label
-                  htmlFor="email-notifications"
-                  className="relative inline-flex items-center cursor-pointer"
-                >
-                  <input
-                    id="email-notifications"
-                    type="checkbox"
-                    checked={emailNotifications}
-                    onChange={handleToggle}
-                    className="sr-only peer"
-                  />
-                  <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                </label>
-              </div>
-            </section>
-          </div>
+
+                <hr className="border-gray-100"/>
+
+                {/* Password Change Warning */}
+                <div className="bg-orange-50 border border-orange-100 rounded-lg p-4">
+                     <h3 className="text-orange-800 font-semibold mb-1">Account Security</h3>
+                     <p className="text-sm text-orange-700 mb-4">
+                        Note: You are logged in using Student Credentials. Changing the password here will change it for the student account as well.
+                     </p>
+                    
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <input
+                            type="password"
+                            name="current"
+                            placeholder="Current Password"
+                            value={passwords.current}
+                            onChange={handlePasswordChange}
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                        />
+                        <input
+                            type="password"
+                            name="new"
+                            placeholder="New Password"
+                            value={passwords.new}
+                            onChange={handlePasswordChange}
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                        />
+                        <input
+                            type="password"
+                            name="confirm"
+                            placeholder="Confirm New Password"
+                            value={passwords.confirm}
+                            onChange={handlePasswordChange}
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                        />
+                     </div>
+                </div>
+
+                <div className="flex justify-end pt-4">
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/30"
+                    >
+                        {saving ? "Saving Changes..." : "Save Changes"}
+                    </button>
+                </div>
+            </form>
         </div>
-
-        {/* Sticky footer */}
-        <footer className="border-t bg-white p-4 sticky bottom-0 z-10">
-          <div className="max-w-4xl mx-auto flex justify-end space-x-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!isPasswordValid}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Save Changes
-            </button>
-          </div>
-        </footer>
-      </form>
+      </div>
     </div>
   );
 }

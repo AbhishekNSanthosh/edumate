@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import "@styles/scss/main.scss";
 import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "../context/AuthContext";
 
 export const metadata: Metadata = {
   title: "Edumate",
@@ -16,8 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {children}
-        <Toaster position="bottom-center" reverseOrder={false} />
+        {/* Auth Provider wrapping the app */}
+        <AuthProvider>
+          {children}
+          <Toaster position="bottom-center" reverseOrder={false} />
+        </AuthProvider>
       </body>
     </html>
   );

@@ -1,119 +1,278 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
+import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy, updateDoc, doc } from "firebase/firestore";
+import { db } from "../../../config/firebaseConfig";
+import toast from "react-hot-toast";
+
+interface Fee {
+  id: string;
+  item: string;
+  amount: number;
+  dueDate: any; // Firestore Timestamp
+  status: 'paid' | 'pending' | 'overdue';
+  studentId: string;
+  paidAt?: any;
+}
 
 export default function FeesPage() {
+  const { user } = useAuth();
+  const [fees, setFees] = useState<Fee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Computed totals
+  const totalOutstanding = fees
+    .filter(f => f.status === 'pending' || f.status === 'overdue')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const nextDueDate = fees
+    .filter(f => f.status === 'pending')
+    .sort((a, b) => a.dueDate.seconds - b.dueDate.seconds)[0]?.dueDate;
+
+  useEffect(() => {
+    const fetchFees = async () => {
+      if (!user) return;
+      try {
+        const q = query(collection(db, "fees"), where("studentId", "==", user.uid));
+        const snapshot = await getDocs(q);
+        const feesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Fee));
+        
+        // Sort explicitly if needed, though client-side sort is fine for small lists
+        feesData.sort((a, b) => b.dueDate.seconds - a.dueDate.seconds);
+        
+        setFees(feesData);
+      } catch (error) {
+        console.error("Error fetching fees:", error);
+        toast.error("Failed to load fee details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFees();
+  }, [user]);
+
+  const seedFeesData = async () => {
+      if (!user) return;
+      if (!confirm("Generate sample fee data?")) return;
+      
+      try {
+          const sampleFees = [
+              { item: "Tuition Fee - Semester 5", amount: 45000, status: 'pending', dueInDays: 30 },
+              { item: "Lab Fee - Computer Science", amount: 5000, status: 'pending', dueInDays: 15 },
+              { item: "Library Fine", amount: 250, status: 'overdue', dueInDays: -5 },
+              { item: "Hostel Fee - Q3", amount: 12000, status: 'paid', dueInDays: 0 },
+          ];
+
+          for (const fee of sampleFees) {
+              const date = new Date();
+              date.setDate(date.getDate() + fee.dueInDays);
+              
+              await addDoc(collection(db, "fees"), {
+                  studentId: user.uid,
+                  item: fee.item,
+                  amount: fee.amount,
+                  status: fee.status,
+                  dueDate: date,
+                  createdAt: serverTimestamp(),
+                  ...(fee.status === 'paid' ? { paidAt: new Date() } : {})
+              });
+          }
+          toast.success("Sample fees generated! Refreshing...");
+          window.location.reload();
+      } catch (error) {
+          console.error(error);
+          toast.error("Failed to seed data");
+      }
+  }
+
+  const handlePay = async (fee: Fee) => {
+      if(processingId) return;
+      setProcessingId(fee.id);
+      
+      // Simulate Razorpay/Payment Gateway delay
+      const toastId = toast.loading("Initializing secure payment...");
+
+      setTimeout(async () => {
+          try {
+              // In production, this would open Razorpay modal
+              // For demo, we assume success
+              const feeRef = doc(db, "fees", fee.id);
+              await updateDoc(feeRef, {
+                  status: 'paid',
+                  paidAt: new Date()
+              });
+
+              setFees(prev => prev.map(f => f.id === fee.id ? { ...f, status: 'paid', paidAt: new Date() } : f));
+              toast.success("Payment successful! Receipt sent to email.", { id: toastId });
+          } catch (err) {
+              console.error(err);
+              toast.error("Payment failed. Try again.", { id: toastId });
+          } finally {
+              setProcessingId(null);
+          }
+      }, 2000);
+  }
+
+  if (loading) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh] mt-[80px]">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      );
+  }
+
   return (
-    <div className="p-6 space-y-6 bg-gray-50 min-h-screen mt-[80px]">
+    <div className="p-6 space-y-6 bg-gray-50 min-h-screen mt-[80px] mb-[60px]">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">My Fees</h1>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700">
-          Make Payment
-        </button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Fees</h1>
+            <p className="text-gray-500 text-sm">Track your financial status and payment history.</p>
+        </div>
+        
+        {process.env.NODE_ENV === 'development' && fees.length === 0 && (
+             <button onClick={seedFeesData} className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200">
+                 + Seed Data (Dev)
+             </button>
+        )}
       </div>
 
       {/* Top Cards */}
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-gray-600 text-sm">Total Outstanding</h2>
-          <p className="text-3xl font-bold">$17,800.00</p>
-          <button className="mt-3 text-blue-600 font-medium">View All Details</button>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <div>
+            <h2 className="text-gray-500 text-sm font-medium uppercase tracking-wide">Total Outstanding</h2>
+            <p className="text-3xl font-bold text-gray-900 mt-2">₹{totalOutstanding.toLocaleString('en-IN')}</p>
+          </div>
+          <div className="mt-4 w-full bg-gray-100 rounded-full h-1.5">
+               <div className="bg-red-500 h-1.5 rounded-full" style={{ width: totalOutstanding > 0 ? '60%' : '0%' }}></div>
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-gray-600 text-sm">Upcoming Due Date</h2>
-          <p className="text-xl font-semibold mt-2">August 15, 2024</p>
-          <p className="text-sm text-gray-500">Plan your payments to avoid late fees.</p>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+           <div>
+            <h2 className="text-gray-500 text-sm font-medium uppercase tracking-wide">Next Due Date</h2>
+            <p className="text-xl font-bold text-gray-900 mt-2">
+                {nextDueDate ? new Date(nextDueDate.seconds * 1000).toLocaleDateString(undefined, {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                }) : "No pending dues"}
+            </p>
+           </div>
+           {nextDueDate && (
+               <p className="text-sm text-red-500 font-medium mt-2">
+                   Action Required
+               </p>
+           )}
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-gray-600 text-sm">Payment Options</h2>
-          <p className="text-sm mt-2 text-gray-500">
-            Secure online payment gateway. Direct bank transfer (details on request).
-          </p>
-          <button className="mt-3 text-blue-600 font-medium">Learn More</button>
+         <div className="bg-blue-600 p-6 rounded-2xl shadow-sm shadow-blue-200 text-white flex flex-col justify-between">
+           <div>
+            <h2 className="text-blue-100 text-sm font-medium uppercase tracking-wide">Secure Payment</h2>
+            <p className="text-sm text-blue-50 mt-2 opacity-90">
+                All transactions are encrypted and secured. We support UPI, Cards, and Netbanking.
+            </p>
+           </div>
+           
         </div>
       </div>
 
       {/* Fee Breakdown */}
-      <div className="bg-white p-6 rounded-xl shadow">
-        <h2 className="text-lg font-semibold mb-4">Fee Breakdown</h2>
-        <table className="w-full text-left border-t">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="p-3">Fee ID</th>
-              <th className="p-3">Item</th>
-              <th className="p-3">Due Date</th>
-              <th className="p-3">Amount</th>
-              <th className="p-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { id: "F001", item: "Tuition Fee - Semester 1", date: "8/15/2024", amt: "$15,000.00", status: "Outstanding" },
-              { id: "F002", item: "Lab Fee - Semester 1", date: "8/15/2024", amt: "$1,500.00", status: "Outstanding" },
-              { id: "F003", item: "Library Fee - Annual", date: "8/1/2024", amt: "$500.00", status: "Outstanding" },
-              { id: "F004", item: "Exam Fee - Semester 1", date: "11/1/2024", amt: "$800.00", status: "Outstanding" },
-              { id: "F005", item: "Accommodation Fee - Q1", date: "7/1/2024", amt: "$3,000.00", status: "Paid" },
-            ].map((fee) => (
-              <tr key={fee.id} className="border-t">
-                <td className="p-3">{fee.id}</td>
-                <td className="p-3">{fee.item}</td>
-                <td className="p-3">{fee.date}</td>
-                <td className="p-3">{fee.amt}</td>
-                <td className="p-3">
-                  <span
-                    className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                      fee.status === "Paid"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {fee.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900">Fee Breakdown</h2>
+        </div>
+        
+        {fees.length > 0 ? (
+            <div className="overflow-x-auto">
+            <table className="w-full text-left">
+                <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+                <tr>
+                    <th className="p-4">Description</th>
+                    <th className="p-4">Due Date</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Action</th>
+                </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                {fees.map((fee) => {
+                    const isDue = fee.status === 'pending' || fee.status === 'overdue';
+                    const date = fee.dueDate?.seconds ? new Date(fee.dueDate.seconds * 1000) : new Date();
+
+                    return (
+                        <tr key={fee.id} className="group hover:bg-gray-50 transition-colors">
+                            <td className="p-4 font-medium text-gray-900">{fee.item}</td>
+                            <td className="p-4 text-gray-600 text-sm">{date.toLocaleDateString()}</td>
+                            <td className="p-4 font-semibold text-gray-900">₹{fee.amount.toLocaleString('en-IN')}</td>
+                            <td className="p-4">
+                            <span
+                                className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                fee.status === "paid"
+                                    ? "bg-green-100 text-green-700"
+                                    : fee.status === "overdue" 
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                }`}
+                            >
+                                {fee.status.charAt(0).toUpperCase() + fee.status.slice(1)}
+                            </span>
+                            </td>
+                            <td className="p-4 text-right">
+                                {isDue && (
+                                    <button 
+                                        onClick={() => handlePay(fee)}
+                                        disabled={!!processingId}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition shadow-sm shadow-blue-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        {processingId === fee.id ? "Processing..." : "Pay Now"}
+                                    </button>
+                                )}
+                                {fee.status === 'paid' && (
+                                    <span className="text-gray-400 text-sm">Paid on {fee.paidAt?.toDate().toLocaleDateString()}</span>
+                                )}
+                            </td>
+                        </tr>
+                    );
+                })}
+                </tbody>
+            </table>
+            </div>
+        ) : (
+             <div className="p-10 text-center text-gray-500">
+                 No fee records found.
+             </div>
+        )}
       </div>
 
-      {/* Payment History */}
-      <div className="bg-white p-6 rounded-xl shadow">
-        <h2 className="text-lg font-semibold mb-4">Payment History</h2>
-        <table className="w-full text-left border-t">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="p-3">Payment ID</th>
-              <th className="p-3">Date</th>
-              <th className="p-3">Description</th>
-              <th className="p-3">Amount Paid</th>
-              <th className="p-3">Method</th>
-              <th className="p-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { id: "P001", date: "6/28/2024", desc: "Accommodation Fee - Q1", amt: "$3,000.00", method: "Online Payment", status: "Success" },
-              { id: "P002", date: "5/10/2024", desc: "Admission Fee", amt: "$5,000.00", method: "Bank Transfer", status: "Success" },
-              { id: "P003", date: "4/1/2024", desc: "Application Fee", amt: "$100.00", method: "Credit Card", status: "Success" },
-            ].map((p) => (
-              <tr key={p.id} className="border-t">
-                <td className="p-3">{p.id}</td>
-                <td className="p-3">{p.date}</td>
-                <td className="p-3">{p.desc}</td>
-                <td className="p-3">{p.amt}</td>
-                <td className="p-3">{p.method}</td>
-                <td className="p-3">
-                  <span className="px-2 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700">
-                    {p.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="text-sm text-gray-500 mt-3">Payments typically process within 1-3 business days.</p>
-      </div>
+       {/* Payment History (Filtered from fees for simplicity) */}
+       {fees.some(f => f.status === 'paid') && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-6 border-b border-gray-100">
+                    <h2 className="text-lg font-bold text-gray-900">Transaction History</h2>
+                </div>
+                <div className="p-6">
+                    <div className="space-y-4">
+                        {fees.filter(f => f.status === 'paid').map(fee => (
+                            <div key={fee.id} className="flex justify-between items-center p-3 rounded-lg bg-gray-50 border border-gray-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-lg">
+                                        ✓
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-gray-900">{fee.item}</p>
+                                        <p className="text-xs text-gray-500">Bank Transfer • {fee.paidAt?.toDate().toLocaleDateString()}</p>
+                                    </div>
+                                </div>
+                                <span className="font-bold text-gray-900">₹{fee.amount.toLocaleString('en-IN')}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+       )}
     </div>
   );
 }

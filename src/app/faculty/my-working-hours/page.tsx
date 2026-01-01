@@ -1,6 +1,11 @@
 'use client';
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../../context/AuthContext'
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { db } from '../../../config/firebaseConfig'
+import LogHoursModal from '../../../widgets/Faculty/LogHoursModal'
+import { IoAddCircleOutline, IoCalendarOutline } from 'react-icons/io5'
 
 interface WorkLog {
   date: string;
@@ -8,236 +13,235 @@ interface WorkLog {
   nonTeachingHours: number;
   totalHours: number;
   overtime: number;
-  status: 'pending' | 'approved' | 'rejected';
-}
-
-interface OvertimeRecord {
-  id: number;
-  date: string;
-  description: string;
-  hours: number;
-  status: 'pending' | 'approved' | 'rejected';
+  details: any[]; // Combined records for tooltip/modal
 }
 
 export default function page() {
-  const [selectedMonth, setSelectedMonth] = useState('December 2025')
-  const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily')
+  const { user } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)) // YYYY-MM
+  const [logs, setLogs] = useState<WorkLog[]>([])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  // Sample data - in a real app, this would come from an API
-  const currentDate = 'December 30, 2025'
-  const dailyLogs: WorkLog[] = [
-    { date: 'Dec 29, 2025', teachingHours: 4, nonTeachingHours: 2, totalHours: 6, overtime: 0.5, status: 'approved' },
-    { date: 'Dec 30, 2025', teachingHours: 3, nonTeachingHours: 3, totalHours: 6, overtime: 0, status: 'pending' },
-    { date: 'Dec 31, 2025', teachingHours: 0, nonTeachingHours: 0, totalHours: 0, overtime: 0, status: 'pending' },
-  ]
+  useEffect(() => {
+    const fetchWorkData = async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            // 1. Fetch Teaching Hours (from Attendance Sessions)
+            // Assuming each attendance session is ~1.5 hours (or store duration in session doc)
+            // For now, let's assume standard class duration = 1.5 hours
+            const CLASS_DURATION = 1.5; 
 
-  const monthlySummary = {
-    month: 'December 2025',
-    totalTeaching: 45,
-    totalNonTeaching: 30,
-    totalHours: 75,
-    overtime: 5,
-    averageDaily: 6.5,
-  }
+            const startOfMonth = new Date(`${selectedMonth}-01`);
+            const endOfMonth = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() + 1, 0);
 
-  const overtimeRecords: OvertimeRecord[] = [
-    { id: 1, date: 'Dec 25, 2025', description: 'Extra class for Algorithms', hours: 2, status: 'approved' },
-    { id: 2, date: 'Dec 28, 2025', description: 'Workshop session', hours: 1.5, status: 'pending' },
-    { id: 3, date: 'Dec 30, 2025', description: 'Meeting with HOD', hours: 0.5, status: 'pending' },
-  ]
+            const attendanceQuery = query(
+                collection(db, 'attendance_sessions'), 
+                where('facultyId', '==', user.uid)
+            );
+            
+            const attendanceSnap = await getDocs(attendanceQuery);
+            const attendanceDocs = attendanceSnap.docs
+                .map(doc => ({ id: doc.id, type: 'teaching', ...doc.data() }))
+                .filter((doc: any) => doc.date >= startOfMonth.toISOString().split('T')[0] && doc.date <= endOfMonth.toISOString().split('T')[0]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+            // 2. Fetch Non-Teaching Hours (from Manual Logs)
+            const logsQuery = query(
+                collection(db, 'faculty_work_logs'),
+                where('facultyId', '==', user.uid)
+            );
+
+            const logsSnap = await getDocs(logsQuery);
+            const manualDocs = logsSnap.docs
+                .map(doc => ({ id: doc.id, type: 'manual', ...doc.data() }))
+                .filter((doc: any) => doc.date >= startOfMonth.toISOString().split('T')[0] && doc.date <= endOfMonth.toISOString().split('T')[0]);
+
+            // 3. Merge and Aggregate by Date
+            const allRecords = [...attendanceDocs, ...manualDocs];
+            const dateMap = new Map<string, WorkLog>();
+
+            allRecords.forEach((record: any) => {
+                const date = record.date;
+                if (!dateMap.has(date)) {
+                    dateMap.set(date, { 
+                        date, 
+                        teachingHours: 0, 
+                        nonTeachingHours: 0, 
+                        totalHours: 0, 
+                        overtime: 0,
+                        details: []
+                    });
+                }
+                
+                const entry = dateMap.get(date)!;
+                entry.details.push(record);
+                
+                if (record.type === 'teaching') {
+                    // Use recorded slotTime duration if available, else 1.5
+                    entry.teachingHours += CLASS_DURATION; 
+                } else {
+                    entry.nonTeachingHours += record.duration || 0;
+                }
+            });
+
+            // Calculate totals and overtime (e.g., > 8 hours is overtime)
+            const aggregatedLogs = Array.from(dateMap.values()).map(log => {
+                log.totalHours = log.teachingHours + log.nonTeachingHours;
+                log.overtime = Math.max(0, log.totalHours - 8); 
+                return log;
+            });
+
+            // Fill in missing days for the month? Or just show days with activity?
+            // Let's sort by date descending
+            aggregatedLogs.sort((a, b) => b.date.localeCompare(a.date));
+            
+            setLogs(aggregatedLogs);
+
+        } catch (error) {
+            console.error("Error fetching working hours", error);
+        } finally {
+            setLoading(false);
+        }
     }
-  }
 
-  const QuickActions = () => (
-    <div className="flex flex-wrap gap-4 mb-6">
-      <div className="flex space-x-2">
-        <button
-          onClick={() => setViewMode('daily')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            viewMode === 'daily' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Daily Log
-        </button>
-        <button
-          onClick={() => setViewMode('monthly')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            viewMode === 'monthly' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Monthly Summary
-        </button>
-      </div>
-      <select
-        value={selectedMonth}
-        onChange={(e) => setSelectedMonth(e.target.value)}
-        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-      >
-        <option>December 2025</option>
-        <option>November 2025</option>
-        <option>October 2025</option>
-      </select>
-      <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
-        Log Today's Hours
-      </button>
-      <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
-        Export Report
-      </button>
-    </div>
-  )
+    fetchWorkData();
+  }, [user, selectedMonth, refreshKey]); // Refresh when month changes or manually refreshed
 
-  const totalTeaching = dailyLogs.reduce((sum, log) => sum + log.teachingHours, 0)
-  const totalNonTeaching = dailyLogs.reduce((sum, log) => sum + log.nonTeachingHours, 0)
-  const totalOvertime = dailyLogs.reduce((sum, log) => sum + log.overtime, 0)
-  const pendingApprovals = dailyLogs.filter(log => log.status === 'pending').length
+  // Summaries
+  const totalTeaching = logs.reduce((sum, log) => sum + log.teachingHours, 0);
+  const totalNonTeaching = logs.reduce((sum, log) => sum + log.nonTeachingHours, 0);
+  const totalHours = logs.reduce((sum, log) => sum + log.totalHours, 0);
+  const totalOvertime = logs.reduce((sum, log) => sum + log.overtime, 0);
 
   return (
     <div className="mt-[100px] p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">My Working Hours</h1>
-          <p className="text-gray-600 mt-2">Track your workload and attendance for {currentDate}.</p>
+        
+        {/* Header & Month Selector */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                 <h1 className="text-3xl font-bold text-gray-900">My Working Hours</h1>
+                 <p className="text-gray-600 mt-1">Automated tracking + Manual logs for {new Date(selectedMonth).toLocaleString('default', {month:'long', year:'numeric'})}</p>
+            </div>
+            
+            <div className="flex gap-3">
+                 <input 
+                    type="month" 
+                    value={selectedMonth} 
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="px-4 py-2 border rounded-lg bg-white shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+                 />
+                 <button 
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm"
+                 >
+                    <IoAddCircleOutline size={20}/> Log Hours
+                 </button>
+            </div>
         </div>
 
-        {/* Quick Actions */}
-        <QuickActions />
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+               <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Teaching</span>
+               <div className="mt-2 flex items-baseline gap-1">
+                   <span className="text-3xl font-bold text-gray-900">{totalTeaching}</span>
+                   <span className="text-sm text-gray-500">hrs</span>
+               </div>
+               <p className="text-xs text-gray-400 mt-2">Automated from Class Attendance</p>
+           </div>
+           
+           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+               <span className="text-xs font-bold text-green-600 uppercase tracking-wider">Non-Teaching</span>
+               <div className="mt-2 flex items-baseline gap-1">
+                   <span className="text-3xl font-bold text-gray-900">{totalNonTeaching}</span>
+                   <span className="text-sm text-gray-500">hrs</span>
+               </div>
+               <p className="text-xs text-gray-400 mt-2">Evaluation, Research, Meetings</p>
+           </div>
 
-        {/* Daily/Monthly View */}
-        {viewMode === 'daily' ? (
-          <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Daily Working Hours Log</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teaching Hours</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Non-Teaching Hours</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Hours</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overtime</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approval Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {dailyLogs.map((log, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.date}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.teachingHours}h</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.nonTeachingHours}h</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.totalHours}h</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.overtime > 0 ? `${log.overtime}h` : '0h'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(log.status)}`}>
-                          {log.status.charAt(0).toUpperCase() + log.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                        {log.status === 'pending' && <button className="text-green-600 hover:text-green-900">Submit for Approval</button>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md mb-8 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Monthly Workload Summary - {selectedMonth}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-blue-800">Total Teaching Hours</h3>
-                <p className="text-2xl font-bold text-blue-600">{monthlySummary.totalTeaching}h</p>
-              </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-green-800">Total Non-Teaching Hours</h3>
-                <p className="text-2xl font-bold text-green-600">{monthlySummary.totalNonTeaching}h</p>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-purple-800">Total Hours</h3>
-                <p className="text-2xl font-bold text-purple-600">{monthlySummary.totalHours}h</p>
-              </div>
-              <div className="bg-orange-50 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-orange-800">Total Overtime</h3>
-                <p className="text-2xl font-bold text-orange-600">{monthlySummary.overtime}h</p>
-              </div>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Average Daily Hours</h3>
-              <p className="text-xl font-bold text-gray-900">{monthlySummary.averageDaily}h</p>
-            </div>
-          </div>
-        )}
+           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+               <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Total Workload</span>
+               <div className="mt-2 flex items-baseline gap-1">
+                   <span className="text-3xl font-bold text-gray-900">{totalHours}</span>
+                   <span className="text-sm text-gray-500">hrs</span>
+               </div>
+               <p className="text-xs text-gray-400 mt-2">Combined Monthly Hours</p>
+           </div>
 
-        {/* Overtime / Extra Class Records */}
-        <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Overtime / Extra Class Records</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {overtimeRecords.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.date}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{record.description}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.hours}h</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(record.status)}`}>
-                        {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                      {record.status === 'pending' && <button className="text-green-600 hover:text-green-900">Submit</button>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+               <span className="text-xs font-bold text-orange-600 uppercase tracking-wider">Overtime</span>
+               <div className="mt-2 flex items-baseline gap-1">
+                   <span className="text-3xl font-bold text-gray-900">{totalOvertime}</span>
+                   <span className="text-sm text-gray-500">hrs</span>
+               </div>
+               <p className="text-xs text-gray-400 mt-2">Hours exceeding 8hr/day</p>
+           </div>
         </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Teaching Hours</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalTeaching}h</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Non-Teaching Hours</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalNonTeaching}h</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-purple-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Overtime</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{totalOvertime}h</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-yellow-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Pending Approvals</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{pendingApprovals}</p>
-          </div>
+        {/* Detailed Logs Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+             <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+                 <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                     <IoCalendarOutline /> Daily Breakdown
+                 </h3>
+             </div>
+             
+             {loading ? (
+                 <div className="p-12 flex justify-center">
+                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                 </div>
+             ) : logs.length > 0 ? (
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-200">
+                                <th className="px-6 py-4 font-semibold">Date</th>
+                                <th className="px-6 py-4 font-semibold">Teaching</th>
+                                <th className="px-6 py-4 font-semibold">Non-Teaching</th>
+                                <th className="px-6 py-4 font-semibold">Total</th>
+                                <th className="px-6 py-4 font-semibold">Overtime</th>
+                                <th className="px-6 py-4 font-semibold">Activities</th>
+                            </tr>
+                        </thead>
+                        <tbody className="text-sm text-gray-700">
+                            {logs.map((log, idx) => (
+                                <tr key={idx} className="border-b border-gray-100 hover:bg-blue-50/20 transition-colors">
+                                    <td className="px-6 py-4 font-medium text-gray-900">
+                                        {new Date(log.date).toLocaleDateString('en-US', { weekday:'short', day:'2-digit', month:'short' })}
+                                    </td>
+                                    <td className="px-6 py-4 text-blue-600 font-medium">{log.teachingHours > 0 ? `${log.teachingHours}h` : '-'}</td>
+                                    <td className="px-6 py-4 text-green-600 font-medium">{log.nonTeachingHours > 0 ? `${log.nonTeachingHours}h` : '-'}</td>
+                                    <td className="px-6 py-4 font-bold">{log.totalHours}h</td>
+                                    <td className="px-6 py-4 text-orange-600 font-bold">{log.overtime > 0 ? `+${log.overtime}h`: '-'}</td>
+                                    <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
+                                        {log.details.map(d => d.activityType || d.subject).join(', ')}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                 </div>
+             ) : (
+                <div className="p-12 text-center text-gray-500">
+                    No records found for this month. 
+                    <br/><span className="text-xs">Mark attendance or log manual hours to see data.</span>
+                </div>
+             )}
         </div>
+
       </div>
+      
+      {user && (
+          <LogHoursModal 
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            facultyId={user.uid}
+            onSuccess={() => setRefreshKey(k => k + 1)}
+          />
+      )}
     </div>
   )
 }

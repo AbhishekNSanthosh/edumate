@@ -10,7 +10,7 @@ import { IoStatsChartSharp } from "react-icons/io5";
 import { MdOutlineAccountBalance } from "react-icons/md";
 
 export const adminSideBarMenu: SideBarMenuItem[] = [
-   {
+  {
     name: "Dashboard",
     link: "dashboard",
     icon: MdSpaceDashboard,
@@ -123,31 +123,37 @@ export const sideBarMenu: SideBarMenuItem[] = [
     name: "Attendance",
     link: "attendance",
     icon: IoIosStats,
-    rightsToView: ["admin", "faculty"],
+    rightsToView: ["admin", "faculty", "student"],
   },
   {
     name: "Assignments",
     link: "assignments",
     icon: MdAssignment,
-    rightsToView: ["admin", "faculty"],
+    rightsToView: ["admin", "faculty", "student"],
   },
   {
     name: "Performance",
     link: "performance",
     icon: IoStatsChartSharp,
-    rightsToView: ["admin", "faculty"],
+    rightsToView: ["admin", "faculty", "student"],
   },
   {
     name: "University Results",
     link: "university-results",
     icon: RiSettings3Fill,
-    rightsToView: ["admin"],
+    rightsToView: ["admin", "student"],
   },
   {
     name: "Hostel & Transport",
     link: "hostel-and-trans",
     icon: MdOutlineAccountBalance,
-    rightsToView: ["admin"],
+    rightsToView: ["admin", "student"],
+  },
+  {
+    name: "Settings",
+    link: "settings",
+    icon: RiSettings3Fill,
+    rightsToView: ["admin", "student"],
   },
 ];
 

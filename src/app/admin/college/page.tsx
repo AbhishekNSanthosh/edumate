@@ -1,401 +1,386 @@
 "use client"
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore'
+import { db } from '../../../config/firebaseConfig'
+import toast from 'react-hot-toast'
 
-export default function page() {
-  // Sample data - in a real app, this would come from an API
+interface CollegeProfile {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+}
+
+interface Accreditation {
+  id: string;
+  body: string;
+  grade: string;
+  year: string;
+  validity: string;
+}
+
+interface AcademicYear {
+  id: string;
+  year: string;
+  startDate: string;
+  endDate: string;
+  semesters: number;
+  status: 'active' | 'completed' | 'upcoming';
+}
+
+interface SystemSettings {
+    maxCreditHours: number;
+    minCGPA: number;
+    attendanceThreshold: number;
+    gradingScale: string;
+    language: string;
+}
+
+export default function CollegePage() {
+  const [loading, setLoading] = useState(true)
   const [editingSection, setEditingSection] = useState<string | null>(null)
+  
+  // Data State
+  const [college, setCollege] = useState<CollegeProfile>({
+      name: '', address: '', phone: '', email: '', website: ''
+  })
+  const [accreditation, setAccreditation] = useState<Accreditation[]>([])
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
+  const [settings, setSettings] = useState<SystemSettings>({
+      maxCreditHours: 0, minCGPA: 0.0, attendanceThreshold: 75, gradingScale: '10.0', language: 'English'
+  })
 
-  const college = {
-    name: 'Example College',
-    address: '123 Education Street, Academic City, State 12345',
-    phone: '+1 (555) 123-4567',
-    email: 'info@examplecollege.edu',
-    website: 'www.examplecollege.edu',
+  // Forms
+  const [accForm, setAccForm] = useState<any>({})
+  const [yearForm, setYearForm] = useState<any>({ status: 'upcoming' })
+
+  useEffect(() => {
+      const fetchData = async () => {
+          try {
+              // 1. College Profile
+              const profileSnap = await getDoc(doc(db, "settings", "college_profile"))
+              if (profileSnap.exists()) {
+                  setCollege(profileSnap.data() as CollegeProfile)
+              }
+
+              // 2. System Settings
+              const settingsSnap = await getDoc(doc(db, "settings", "general"))
+              if (settingsSnap.exists()) {
+                  setSettings(settingsSnap.data() as SystemSettings)
+              }
+              
+              setLoading(false)
+          } catch (error) {
+              console.error("Error fetching settings", error)
+          }
+      }
+      fetchData()
+
+      // Real-time Listeners
+      const unsubAcc = onSnapshot(collection(db, "college_accreditation"), (snap) => {
+          setAccreditation(snap.docs.map(d => ({id: d.id, ...d.data()} as Accreditation)))
+      })
+      const unsubYears = onSnapshot(collection(db, "academic_years"), (snap) => {
+          setAcademicYears(snap.docs.map(d => ({id: d.id, ...d.data()} as AcademicYear)))
+      })
+
+      return () => {
+          unsubAcc()
+          unsubYears()
+      }
+  }, [])
+
+  // Handlers
+  const handleSaveProfile = async () => {
+      try {
+          await setDoc(doc(db, "settings", "college_profile"), college)
+          toast.success("Profile updated")
+          setEditingSection(null)
+      } catch (error) {
+          toast.error("Failed to update profile")
+      }
   }
 
-  const accreditation = [
-    { id: 1, body: 'NAAC', grade: 'A+', year: '2024', validity: '2029' },
-    { id: 2, body: 'UGC', status: 'Recognized', year: '2023', validity: 'Permanent' },
-    { id: 3, body: 'AICTE', status: 'Approved', year: '2024', validity: '2029' },
-  ]
-
-  const academicYears = [
-    { id: 1, year: '2025-2026', startDate: 'Aug 1, 2025', endDate: 'May 31, 2026', semesters: 2, status: 'active' },
-    { id: 2, year: '2024-2025', startDate: 'Aug 1, 2024', endDate: 'May 31, 2025', semesters: 2, status: 'completed' },
-    { id: 3, year: '2026-2027', startDate: 'Aug 1, 2026', endDate: 'May 31, 2027', semesters: 2, status: 'upcoming' },
-  ]
-
-  const systemSettings = {
-    maxCreditHours: 18,
-    minCGPA: 2.0,
-    attendanceThreshold: 75,
-    gradingScale: '4.0',
-    language: 'English',
+  const handleSaveSettings = async () => {
+      try {
+          await setDoc(doc(db, "settings", "general"), settings)
+          toast.success("Settings updated")
+          setEditingSection(null)
+      } catch (error) {
+          toast.error("Failed to update settings")
+      }
   }
 
-  const templates = [
-    { id: 1, name: 'Transcript Certificate', type: 'PDF', lastUpdated: '2025-12-15', status: 'active' },
-    { id: 2, name: 'Degree Certificate', type: 'PDF', lastUpdated: '2025-11-20', status: 'active' },
-    { id: 3, name: 'ID Card Template', type: 'Image', lastUpdated: '2025-12-10', status: 'draft' },
-  ]
+  const handleAddAccreditation = async () => {
+      try {
+          await addDoc(collection(db, "college_accreditation"), accForm)
+          toast.success("Accreditation added")
+          setEditingSection(null)
+          setAccForm({})
+      } catch (error) {
+          toast.error("Failed to add accreditation")
+      }
+  }
+
+  const handleDeleteAccreditation = async (id: string) => {
+      if(!confirm("Delete this record?")) return;
+      await deleteDoc(doc(db, "college_accreditation", id))
+      toast.success("Deleted")
+  }
+
+  const handleAddYear = async () => {
+      try {
+          await addDoc(collection(db, "academic_years"), {
+              ...yearForm,
+              semesters: parseInt(yearForm.semesters)
+          })
+          toast.success("Academic Year added")
+          setEditingSection(null)
+          setYearForm({ status: 'upcoming' })
+      } catch (error) {
+          toast.error("Failed to add year")
+      }
+  }
+
+  const toggleYearStatus = async (item: AcademicYear) => {
+      const newStatus = item.status === 'active' ? 'completed' : 'active'
+      await updateDoc(doc(db, "academic_years", item.id), { status: newStatus })
+  }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'completed': return 'bg-gray-100 text-gray-800';
-      case 'upcoming': return 'bg-blue-100 text-blue-800';
-      case 'draft': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+      switch (status) {
+        case 'active': return 'bg-green-100 text-green-800';
+        case 'completed': return 'bg-gray-100 text-gray-800';
+        case 'upcoming': return 'bg-blue-100 text-blue-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
   }
 
-  const handleEdit = (section: string) => {
-    setEditingSection(editingSection === section ? null : section)
-  }
-
-  const QuickActions = () => (
-    <div className="flex space-x-4 mb-6">
-      <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-        Update College Info
-      </button>
-      <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-        Upload Logo
-      </button>
-      <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
-        Export Settings
-      </button>
-    </div>
-  )
+  if (loading) return <div className="p-10">Loading configuration...</div>
 
   return (
     <div className="mt-[100px] p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">College Configuration</h1>
-          <p className="text-gray-600 mt-2">Institution-level configuration and identity management.</p>
+          <p className="text-gray-600 mt-2">Manage institution profile, accreditation, and academic calendars.</p>
         </div>
 
-        {/* Quick Actions */}
-        <QuickActions />
-
-        {/* College Info Card */}
+        {/* 1. College Profile */}
         <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">College Name & Address</h2>
-            <button
-              onClick={() => handleEdit('info')}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-            >
-              {editingSection === 'info' ? 'Cancel' : 'Edit'}
-            </button>
-          </div>
-          {editingSection === 'info' ? (
-            <div className="space-y-4">
-              <input
-                type="text"
-                defaultValue={college.name}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                placeholder="College Name"
-              />
-              <textarea
-                defaultValue={college.address}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Address"
-                rows={3}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input
-                  type="tel"
-                  defaultValue={college.phone}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Phone"
-                />
-                <input
-                  type="email"
-                  defaultValue={college.email}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Email"
-                />
-                <input
-                  type="url"
-                  defaultValue={college.website}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Website"
-                />
-              </div>
-              <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
-                Save Changes
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <p className="text-lg text-gray-900">{college.name}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <p className="text-lg text-gray-900">{college.address}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <p className="text-lg text-gray-900">{college.phone}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <p className="text-lg text-gray-900">{college.email}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
-                <p className="text-lg text-gray-900">{college.website}</p>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
-                <div className="flex items-center space-x-4">
-                  <img src="/api/placeholder/100/100" alt="College Logo" className="w-16 h-16 rounded-full object-cover" />
-                  <button className="text-blue-600 hover:text-blue-900">Change Logo</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Accreditation Details */}
-        <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Accreditation Details</h2>
-            <button
-              onClick={() => handleEdit('accreditation')}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-            >
-              {editingSection === 'accreditation' ? 'Cancel' : 'Add New'}
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Body</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade/Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Validity</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {accreditation.map((acc) => (
-                  <tr key={acc.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{acc.body}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{acc.grade || acc.status}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{acc.year}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{acc.validity}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900">View</button>
-                      <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Academic Year Configuration */}
-        <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Academic Year Configuration</h2>
-            <button
-              onClick={() => handleEdit('academic')}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-            >
-              {editingSection === 'academic' ? 'Cancel' : 'Add Year'}
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semesters</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {academicYears.map((year) => (
-                  <tr key={year.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{year.year}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{year.startDate}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{year.endDate}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{year.semesters}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(year.status)}`}>
-                        {year.status.charAt(0).toUpperCase() + year.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                      <button className="text-green-600 hover:text-green-900">Activate</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* System-Wide Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">System-Wide Settings</h2>
-            <button
-              onClick={() => handleEdit('settings')}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-            >
-              {editingSection === 'settings' ? 'Cancel' : 'Edit'}
-            </button>
-          </div>
-          {editingSection === 'settings' ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Credit Hours</label>
-                  <input
-                    type="number"
-                    defaultValue={systemSettings.maxCreditHours}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Min CGPA</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    defaultValue={systemSettings.minCGPA}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Attendance Threshold (%)</label>
-                  <input
-                    type="number"
-                    defaultValue={systemSettings.attendanceThreshold}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Grading Scale</label>
-                  <select
-                    defaultValue={systemSettings.gradingScale}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option>4.0</option>
-                    <option>10.0</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Language</label>
-                <select
-                  defaultValue={systemSettings.language}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">College Profile</h2>
+                <button 
+                    onClick={() => setEditingSection(editingSection === 'profile' ? null : 'profile')}
+                    className="text-blue-600 hover:text-blue-800 font-medium text-sm"
                 >
-                  <option>English</option>
-                  <option>Hindi</option>
-                </select>
-              </div>
-              <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
-                Save Settings
-              </button>
+                    {editingSection === 'profile' ? 'Cancel' : 'Edit'}
+                </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max Credit Hours per Semester</label>
-                <p className="text-lg text-gray-900">{systemSettings.maxCreditHours}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum CGPA for Graduation</label>
-                <p className="text-lg text-gray-900">{systemSettings.minCGPA}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Attendance Threshold</label>
-                <p className="text-lg text-gray-900">{systemSettings.attendanceThreshold}%</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Grading Scale</label>
-                <p className="text-lg text-gray-900">{systemSettings.gradingScale}</p>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Language</label>
-                <p className="text-lg text-gray-900">{systemSettings.language}</p>
-              </div>
-            </div>
-          )}
+            
+            {editingSection === 'profile' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" placeholder="College Name" className="border p-2 rounded" 
+                        value={college.name} onChange={e => setCollege({...college, name: e.target.value})} />
+                    <input type="text" placeholder="Phone" className="border p-2 rounded" 
+                        value={college.phone} onChange={e => setCollege({...college, phone: e.target.value})} />
+                    <input type="email" placeholder="Email" className="border p-2 rounded" 
+                        value={college.email} onChange={e => setCollege({...college, email: e.target.value})} />
+                    <input type="url" placeholder="Website" className="border p-2 rounded" 
+                         value={college.website} onChange={e => setCollege({...college, website: e.target.value})} />
+                    <textarea placeholder="Address" className="border p-2 rounded md:col-span-2" rows={3}
+                         value={college.address} onChange={e => setCollege({...college, address: e.target.value})} />
+                    <div className="md:col-span-2">
+                        <button onClick={handleSaveProfile} className="bg-green-600 text-white px-4 py-2 rounded">Save Profile</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 text-sm">
+                    <div><span className="text-gray-500 block">Name</span> <span className="font-medium text-lg">{college.name || '-'}</span></div>
+                    <div><span className="text-gray-500 block">Phone</span> <span className="font-medium">{college.phone || '-'}</span></div>
+                    <div><span className="text-gray-500 block">Email</span> <span className="font-medium">{college.email || '-'}</span></div>
+                    <div><span className="text-gray-500 block">Website</span> <a href={college.website} target="_blank" className="text-blue-600 hover:underline">{college.website || '-'}</a></div>
+                    <div className="md:col-span-2"><span className="text-gray-500 block">Address</span> <span className="font-medium">{college.address || '-'}</span></div>
+                </div>
+            )}
         </div>
 
-        {/* Document Templates */}
+        {/* 2. Accreditation */}
         <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Document Templates</h2>
-            <button
-              onClick={() => handleEdit('templates')}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
-            >
-              {editingSection === 'templates' ? 'Cancel' : 'Add Template'}
-            </button>
-          </div>
-          <div className="overflow-x-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Accreditation</h2>
+                <button 
+                    onClick={() => setEditingSection(editingSection === 'accreditation' ? null : 'accreditation')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
+                >
+                    {editingSection === 'accreditation' ? 'Close' : '+ Add New'}
+                </button>
+            </div>
+            
+            {editingSection === 'accreditation' && (
+                <div className="p-6 bg-blue-50 grid grid-cols-1 md:grid-cols-5 gap-4 items-end border-b">
+                    <input type="text" placeholder="Body (e.g. NAAC)" className="border p-2 rounded" 
+                        value={accForm.body || ''} onChange={e => setAccForm({...accForm, body: e.target.value})} />
+                    <input type="text" placeholder="Grade (e.g. A+)" className="border p-2 rounded" 
+                        value={accForm.grade || ''} onChange={e => setAccForm({...accForm, grade: e.target.value})} />
+                    <input type="text" placeholder="Year" className="border p-2 rounded" 
+                        value={accForm.year || ''} onChange={e => setAccForm({...accForm, year: e.target.value})} />
+                    <input type="text" placeholder="Validity" className="border p-2 rounded" 
+                        value={accForm.validity || ''} onChange={e => setAccForm({...accForm, validity: e.target.value})} />
+                    <button onClick={handleAddAccreditation} className="bg-green-600 text-white p-2 rounded">Save</button>
+                </div>
+            )}
+
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {templates.map((template) => (
-                  <tr key={template.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{template.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{template.type}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{template.lastUpdated}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(template.status)}`}>
-                        {template.status.charAt(0).toUpperCase() + template.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900">Download</button>
-                      <button className="text-blue-600 hover:text-blue-900">Edit</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+                <thead className="bg-gray-50">
+                    <tr>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Body</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Grade</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Year</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Validity</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                    {accreditation.map(a => (
+                        <tr key={a.id}>
+                            <td className="px-6 py-4 font-bold text-gray-900">{a.body}</td>
+                            <td className="px-6 py-4 text-gray-900">{a.grade}</td>
+                            <td className="px-6 py-4 text-gray-500">{a.year}</td>
+                            <td className="px-6 py-4 text-gray-500">{a.validity}</td>
+                            <td className="px-6 py-4">
+                                <button onClick={() => handleDeleteAccreditation(a.id)} className="text-red-600 hover:text-red-900 text-xs font-bold">Delete</button>
+                            </td>
+                        </tr>
+                    ))}
+                    {accreditation.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-gray-500">No accreditation records found.</td></tr>}
+                </tbody>
             </table>
-          </div>
         </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Active Academic Years</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{academicYears.filter(y => y.status === 'active').length}</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Accreditations</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{accreditation.length}</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Templates</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{templates.length}</p>
-          </div>
+        {/* 3. Academic Years */}
+        <div className="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
+            <div className="p-6 border-b flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Academic Years</h2>
+                <button 
+                    onClick={() => setEditingSection(editingSection === 'years' ? null : 'years')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
+                >
+                    {editingSection === 'years' ? 'Close' : '+ Add Year'}
+                </button>
+            </div>
+            
+            {editingSection === 'years' && (
+                <div className="p-6 bg-blue-50 grid grid-cols-1 md:grid-cols-6 gap-4 items-end border-b">
+                     <div className="col-span-2">
+                        <input type="text" placeholder="Year Label (e.g. 2025-26)" className="border p-2 rounded w-full" 
+                            value={yearForm.year || ''} onChange={e => setYearForm({...yearForm, year: e.target.value})} />
+                     </div>
+                     <input type="date" className="border p-2 rounded" 
+                        value={yearForm.startDate || ''} onChange={e => setYearForm({...yearForm, startDate: e.target.value})} />
+                     <input type="date" className="border p-2 rounded" 
+                        value={yearForm.endDate || ''} onChange={e => setYearForm({...yearForm, endDate: e.target.value})} />
+                     <input type="number" placeholder="Semesters" className="border p-2 rounded" 
+                        value={yearForm.semesters || ''} onChange={e => setYearForm({...yearForm, semesters: e.target.value})} />
+                    <button onClick={handleAddYear} className="bg-green-600 text-white p-2 rounded">Save</button>
+                </div>
+            )}
+
+            <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                    <tr>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Academic Year</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Duration</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Semesters</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                    {academicYears.map(y => (
+                        <tr key={y.id}>
+                            <td className="px-6 py-4 font-bold text-gray-900">{y.year}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{y.startDate} to {y.endDate}</td>
+                            <td className="px-6 py-4 text-gray-900">{y.semesters}</td>
+                            <td className="px-6 py-4">
+                                <span className={`px-2 py-1 rounded text-xs ${getStatusColor(y.status)}`}>
+                                    {y.status.toUpperCase()}
+                                </span>
+                            </td>
+                            <td className="px-6 py-4">
+                                <button onClick={() => toggleYearStatus(y)} className="text-blue-600 hover:text-blue-900 text-xs font-bold mr-2">
+                                    {y.status === 'active' ? 'Mark Completed' : 'Activate'}
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+                    {academicYears.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-gray-500">No academic years found.</td></tr>}
+                </tbody>
+            </table>
         </div>
+
+        {/* 4. System Settings */}
+        <div className="bg-white p-6 rounded-lg shadow-md mb-8">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">System Settings</h2>
+                <button 
+                    onClick={() => setEditingSection(editingSection === 'settings' ? null : 'settings')}
+                    className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                >
+                    {editingSection === 'settings' ? 'Cancel' : 'Edit'}
+                </button>
+            </div>
+             {editingSection === 'settings' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Max Credit Hours</label>
+                        <input type="number" className="border p-2 rounded w-full" 
+                        value={settings.maxCreditHours} onChange={e => setSettings({...settings, maxCreditHours: parseInt(e.target.value)})} />
+                    </div>
+                     <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Min CGPA</label>
+                        <input type="number" step="0.1" className="border p-2 rounded w-full" 
+                        value={settings.minCGPA} onChange={e => setSettings({...settings, minCGPA: parseFloat(e.target.value)})} />
+                    </div>
+                     <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Attendance Threshold (%)</label>
+                        <input type="number" className="border p-2 rounded w-full" 
+                        value={settings.attendanceThreshold} onChange={e => setSettings({...settings, attendanceThreshold: parseInt(e.target.value)})} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Grading Scale</label>
+                        <select className="border p-2 rounded w-full"
+                             value={settings.gradingScale} onChange={e => setSettings({...settings, gradingScale: e.target.value})}
+                        >
+                            <option value="4.0">4.0</option>
+                            <option value="10.0">10.0</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">System Language</label>
+                        <select className="border p-2 rounded w-full"
+                             value={settings.language} onChange={e => setSettings({...settings, language: e.target.value})}
+                        >
+                            <option value="English">English</option>
+                            <option value="Hindi">Hindi</option>
+                        </select>
+                    </div>
+                    <div className="md:col-span-2 mt-4">
+                        <button onClick={handleSaveSettings} className="bg-green-600 text-white px-4 py-2 rounded">Save Settings</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 text-sm">
+                    <div><span className="text-gray-500 block">Max Credits</span> <span className="font-medium text-lg">{settings.maxCreditHours}</span></div>
+                    <div><span className="text-gray-500 block">Min CGPA</span> <span className="font-medium">{settings.minCGPA}</span></div>
+                    <div><span className="text-gray-500 block">Attendance Threshold</span> <span className="font-medium">{settings.attendanceThreshold}%</span></div>
+                    <div><span className="text-gray-500 block">Grading Scale</span> <span className="font-medium">{settings.gradingScale}</span></div>
+                    <div><span className="text-gray-500 block">Language</span> <span className="font-medium">{settings.language}</span></div>
+                </div>
+            )}
+        </div>
+
       </div>
     </div>
   )
