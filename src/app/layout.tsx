@@ -1,5 +1,6 @@
 import React from "react";
 import type { Metadata } from "next";
+import "@styles/globals.css";
 import "@styles/scss/main.scss";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "../context/AuthContext";

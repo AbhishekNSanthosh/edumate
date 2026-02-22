@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
-import { FaRobot, FaTimes, FaPaperPlane, FaUser } from "react-icons/fa";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import { FaRobot, FaTimes, FaPaperPlane, FaUser, FaLock } from "react-icons/fa";
 import { auth, db } from "../../config/firebaseConfig";
 import {
   collection,
@@ -9,8 +10,15 @@ import {
   getDocs,
   doc,
   getDoc,
+  limit,
+  orderBy,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
+type Role = "admin" | "faculty" | "student" | "parent";
 
 interface Message {
   id: string;
@@ -19,886 +27,762 @@ interface Message {
   timestamp: Date;
 }
 
-interface QuickAction {
-  label: string;
-  action: string;
-}
-
-interface UserData {
+interface ResolvedUser {
+  uid: string;
   name: string;
   email: string;
-  role: string;
-  uid: string;
-  regNumber?: string;
-  department?: string;
-  batch?: string;
-  semester?: string;
+  role: Role;
+  // role-specific extras
+  batchId?: string;       // student's batch
+  childUid?: string;      // parent's child UID
+  childName?: string;
+  facultySubjects?: string[]; // faculty's subject IDs
 }
 
+// ─────────────────────────────────────────────
+// Intent → keyword map (no AI needed here)
+// ─────────────────────────────────────────────
+const INTENT_KEYWORDS: Record<string, string[]> = {
+  attendance: ["attendance", "present", "absent", "classes missed", "attendance report", "attendance percentage"],
+  assignments: ["assignment", "homework", "submission", "deadline", "pending assignment", "due"],
+  timetable: ["timetable", "schedule", "class schedule", "period", "today's class"],
+  leaves: ["leave", "leaves", "leave balance", "leave application", "leave history", "applied leave"],
+  results: ["result", "marks", "grade", "cgpa", "performance", "score", "exam"],
+  notifications: ["notification", "notice", "announcement", "alert"],
+  profile: ["profile", "my info", "my details", "my data", "who am i"],
+  students: ["student list", "students in batch", "batch students", "how many students", "student info", "student details"],
+  faculty: ["faculty list", "teacher list", "faculty info", "faculty details", "staff", "teachers"],
+  departments: ["department", "departments", "dept stats", "department info"],
+  evaluation: ["evaluation", "appraisal", "rating", "faculty rating"],
+  student_leaves: ["student leave", "student leave application", "leave requests", "pending leaves"],
+};
+
+// ─────────────────────────────────────────────
+// Role → allowed intents (hard gate — 0 crossing)
+// ─────────────────────────────────────────────
+const ROLE_ALLOWED_INTENTS: Record<Role, string[]> = {
+  student: ["attendance", "assignments", "timetable", "leaves", "results", "notifications", "profile"],
+  faculty: ["attendance", "assignments", "timetable", "leaves", "results", "notifications", "profile", "students", "student_leaves", "evaluation"],
+  admin: ["attendance", "assignments", "timetable", "leaves", "results", "notifications", "profile", "students", "faculty", "departments", "student_leaves", "evaluation"],
+  parent: ["attendance", "assignments", "timetable", "results", "notifications", "profile"],
+};
+
+// Quick action chips per role
+const QUICK_ACTIONS: Record<Role, { label: string; intent: string }[]> = {
+  student: [
+    { label: "📊 My Attendance", intent: "attendance" },
+    { label: "📝 Assignments", intent: "assignments" },
+    { label: "📅 Timetable", intent: "timetable" },
+    { label: "🏖️ My Leaves", intent: "leaves" },
+    { label: "🎯 Results", intent: "results" },
+    { label: "🔔 Notifications", intent: "notifications" },
+  ],
+  faculty: [
+    { label: "📊 My Attendance", intent: "attendance" },
+    { label: "🏖️ Leave Balance", intent: "leaves" },
+    { label: "👥 Batch Students", intent: "students" },
+    { label: "📝 Assignments", intent: "assignments" },
+    { label: "📅 Timetable", intent: "timetable" },
+    { label: "🔔 Notifications", intent: "notifications" },
+  ],
+  admin: [
+    { label: "👥 Students", intent: "students" },
+    { label: "👨‍🏫 Faculty", intent: "faculty" },
+    { label: "🏢 Departments", intent: "departments" },
+    { label: "🏖️ Leave Requests", intent: "student_leaves" },
+    { label: "📊 Attendance", intent: "attendance" },
+    { label: "🔔 Notifications", intent: "notifications" },
+  ],
+  parent: [
+    { label: "📊 Child's Attendance", intent: "attendance" },
+    { label: "📝 Child's Assignments", intent: "assignments" },
+    { label: "🎯 Child's Results", intent: "results" },
+    { label: "📅 Child's Timetable", intent: "timetable" },
+    { label: "🔔 Notifications", intent: "notifications" },
+    { label: "👤 Child's Profile", intent: "profile" },
+  ],
+};
+
+// ─────────────────────────────────────────────
+// Intent classifier (pure JS, no DB, no AI)
+// ─────────────────────────────────────────────
+function classifyIntent(message: string): string | null {
+  const lower = message.toLowerCase();
+  for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
+    if (keywords.some((kw) => lower.includes(kw))) return intent;
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// Role gate check
+// ─────────────────────────────────────────────
+function isIntentAllowed(role: Role, intent: string): boolean {
+  return ROLE_ALLOWED_INTENTS[role]?.includes(intent) ?? false;
+}
+
+// ─────────────────────────────────────────────
+// Firestore data fetchers — each fetches ONLY
+// what is needed for the specific intent & user.
+// All queries are scoped with uid/role constraints.
+// ─────────────────────────────────────────────
+async function fetchForIntent(
+  intent: string,
+  user: ResolvedUser
+): Promise<any> {
+  const col = collection; // just an alias for readability
+
+  switch (intent) {
+    // ── ATTENDANCE ──────────────────────────────
+    case "attendance": {
+      if (user.role === "student") {
+        const q = query(
+          col(db, "attendance"),
+          where("studentId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "faculty") {
+        const q = query(
+          col(db, "faculty_attendance"),
+          where("facultyId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "parent" && user.childUid) {
+        const q = query(
+          col(db, "attendance"),
+          where("studentId", "==", user.childUid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "admin") {
+        // Admin: summarise overall — fetch limited records to avoid cost
+        const q = query(col(db, "attendance"), limit(50));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── ASSIGNMENTS ──────────────────────────────
+    case "assignments": {
+      if (user.role === "student") {
+        const q = query(
+          col(db, "assignments"),
+          where("studentId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "faculty") {
+        // Faculty sees assignments they created (by facultyId)
+        const q = query(
+          col(db, "assignments"),
+          where("facultyId", "==", user.uid),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "parent" && user.childUid) {
+        const q = query(
+          col(db, "assignments"),
+          where("studentId", "==", user.childUid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "admin") {
+        const q = query(col(db, "assignments"), limit(20));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── TIMETABLE ──────────────────────────────
+    case "timetable": {
+      if (user.role === "student" && user.batchId) {
+        const q = query(
+          col(db, "timetables"),
+          where("batchId", "==", user.batchId)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "faculty") {
+        const q = query(
+          col(db, "timetables"),
+          where("facultyId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "parent" && user.childUid) {
+        // Get child's batchId first
+        const studentSnap = await getDocs(
+          query(col(db, "students"), where("uid", "==", user.childUid))
+        );
+        if (!studentSnap.empty) {
+          const studentData = studentSnap.docs[0].data();
+          const batchId = studentData.batchId;
+          if (batchId) {
+            const q = query(
+              col(db, "timetables"),
+              where("batchId", "==", batchId)
+            );
+            const snap = await getDocs(q);
+            return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          }
+        }
+      }
+      if (user.role === "admin") {
+        const q = query(col(db, "timetables"), limit(20));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── LEAVES ──────────────────────────────────
+    case "leaves": {
+      if (user.role === "student") {
+        const q = query(
+          col(db, "student_leaves"),
+          where("studentId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "faculty") {
+        // Fetch both leave applications and balances
+        const [leavesSnap, balancesSnap] = await Promise.all([
+          getDocs(
+            query(col(db, "faculty_leaves"), where("facultyId", "==", user.uid))
+          ),
+          getDocs(
+            query(col(db, "leave_balances"), where("facultyId", "==", user.uid))
+          ),
+        ]);
+        return {
+          applications: leavesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          balances: balancesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        };
+      }
+      if (user.role === "admin") {
+        // Admin sees all pending faculty leaves
+        const q = query(
+          col(db, "faculty_leaves"),
+          where("status", "==", "pending"),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── RESULTS / PERFORMANCE ──────────────────
+    case "results": {
+      if (user.role === "student") {
+        const q = query(
+          col(db, "evaluation_reports"),
+          where("studentId", "==", user.uid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "faculty") {
+        // Faculty can see evaluation reports they created
+        const q = query(
+          col(db, "evaluation_reports"),
+          where("facultyId", "==", user.uid),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "parent" && user.childUid) {
+        const q = query(
+          col(db, "evaluation_reports"),
+          where("studentId", "==", user.childUid)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "admin") {
+        const q = query(col(db, "evaluation_reports"), limit(20));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── NOTIFICATIONS ──────────────────────────
+    case "notifications": {
+      const q = query(
+        col(db, "notifications"),
+        where("targetRole", "in", [user.role, "all"]),
+        limit(10)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+
+    // ── PROFILE ────────────────────────────────
+    case "profile": {
+      if (user.role === "student") {
+        const snap = await getDoc(doc(db, "students", user.uid));
+        return snap.exists() ? snap.data() : null;
+      }
+      if (user.role === "faculty") {
+        const [profileSnap, facultySnap] = await Promise.all([
+          getDocs(query(col(db, "faculty_profiles"), where("facultyId", "==", user.uid))),
+          getDoc(doc(db, "faculty", user.uid)),
+        ]);
+        return {
+          profile: profileSnap.empty ? null : profileSnap.docs[0].data(),
+          faculty: facultySnap.exists() ? facultySnap.data() : null,
+        };
+      }
+      if (user.role === "parent") {
+        // Parents may be stored by email — try email-based query
+        const q = query(col(db, "parents"), where("email", "==", user.email));
+        const snap = await getDocs(q);
+        return snap.empty ? null : snap.docs[0].data();
+      }
+      if (user.role === "admin") {
+        // Admins: try by email since admins collection structure may vary
+        const q = query(col(db, "admins"), where("email", "==", user.email));
+        const snap = await getDocs(q);
+        return snap.empty ? null : snap.docs[0].data();
+      }
+      return null;
+    }
+
+    // ── STUDENTS (faculty & admin only) ────────
+    case "students": {
+      if (user.role === "faculty" && user.batchId) {
+        const q = query(
+          col(db, "students"),
+          where("batchId", "==", user.batchId)
+        );
+        const snap = await getDocs(q);
+        // Return only non-sensitive fields
+        return snap.docs.map((d) => {
+          const data = d.data();
+          return { name: data.name, regNumber: data.regNumber, batchId: data.batchId };
+        });
+      }
+      if (user.role === "admin") {
+        const q = query(col(db, "students"), limit(30));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => {
+          const data = d.data();
+          return { name: data.name, regNumber: data.regNumber, department: data.department, batch: data.batch };
+        });
+      }
+      return null;
+    }
+
+    // ── FACULTY (admin only) ───────────────────
+    case "faculty": {
+      if (user.role === "admin") {
+        const q = query(col(db, "faculty"), limit(30));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => {
+          const data = d.data();
+          return { name: data.name, email: data.email, department: data.department, designation: data.designation };
+        });
+      }
+      return null;
+    }
+
+    // ── DEPARTMENTS (admin only) ───────────────
+    case "departments": {
+      if (user.role === "admin") {
+        const snap = await getDocs(col(db, "departments"));
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── EVALUATION (faculty & admin only) ─────
+    case "evaluation": {
+      if (user.role === "faculty") {
+        const q = query(
+          col(db, "evaluation_reports"),
+          where("facultyId", "==", user.uid),
+          limit(10)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "admin") {
+        const q = query(col(db, "evaluation_reports"), limit(20));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    // ── STUDENT LEAVES (faculty & admin only) ──
+    case "student_leaves": {
+      if (user.role === "faculty" && user.batchId) {
+        const q = query(
+          col(db, "student_leaves"),
+          where("batchId", "==", user.batchId),
+          where("status", "==", "pending"),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      if (user.role === "admin") {
+        const q = query(
+          col(db, "student_leaves"),
+          where("status", "==", "pending"),
+          limit(20)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+      return null;
+    }
+
+    default:
+      return null;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Resolve user role & extras from Firestore
+// Called ONCE when chat opens (not on every message)
+// ─────────────────────────────────────────────
+async function resolveUser(
+  uid: string,
+  email: string,
+  displayName: string | null
+): Promise<ResolvedUser | null> {
+  try {
+    // 1. Check students — doc ID IS the Firebase Auth UID
+    const studentDoc = await getDoc(doc(db, "students", uid));
+    if (studentDoc.exists()) {
+      const data = studentDoc.data();
+      return {
+        uid,
+        name: data.name || displayName || email.split("@")[0],
+        email,
+        role: "student",
+        batchId: data.batchId,
+      };
+    }
+
+    // 2. Check faculty — doc ID IS the Firebase Auth UID
+    const facultyDoc = await getDoc(doc(db, "faculty", uid));
+    if (facultyDoc.exists()) {
+      const data = facultyDoc.data();
+      return {
+        uid,
+        name: data.name || displayName || email.split("@")[0],
+        email,
+        role: "faculty",
+        batchId: data.batchId,
+        facultySubjects: data.subjects || [],
+      };
+    }
+
+    // 3. Check admins — query by email (admins may not use uid as doc ID)
+    const adminSnap = await getDocs(
+      query(collection(db, "admins"), where("email", "==", email))
+    );
+    if (!adminSnap.empty) {
+      const data = adminSnap.docs[0].data();
+      return {
+        uid,
+        name: data.name || displayName || "Admin",
+        email,
+        role: "admin",
+      };
+    }
+
+    // 4. Check parents — query by email
+    const parentSnap = await getDocs(
+      query(collection(db, "parents"), where("email", "==", email))
+    );
+    if (!parentSnap.empty) {
+      const data = parentSnap.docs[0].data();
+      const childUid = data.childUid || data.studentUid || null;
+      let childName: string | undefined;
+
+      // Fetch child's name using doc ID lookup
+      if (childUid) {
+        const childDoc = await getDoc(doc(db, "students", childUid));
+        if (childDoc.exists()) {
+          childName = childDoc.data().name;
+        }
+      }
+
+      return {
+        uid,
+        name: data.name || displayName || "Parent",
+        email,
+        role: "parent",
+        childUid,
+        childName,
+      };
+    }
+
+    return null; // user not found in any role collection
+  } catch (error) {
+    console.error("Error resolving user:", error);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────
+// EduBot Component
+// ─────────────────────────────────────────────
 export default function EduBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [resolvedUser, setResolvedUser] = useState<ResolvedUser | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const userResolutionDone = useRef(false);
 
-  // Fetch current user data
+  // ── Auth listener ─────────────────────────
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      const isCurrent = () => auth.currentUser?.uid === user?.uid;
-
-      if (user) {
-        console.log("🔐 User logged in:", user.email);
-        try {
-          // Try to get user document by UID first (more reliable)
-          const userDocRef = doc(db, "users", user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            console.log("✅ User data found by UID:", userData);
-            if (isCurrent()) {
-              setCurrentUser({
-                name: userData.name || user.displayName || "User",
-                email: user.email || "",
-                role: userData.role || "student",
-                uid: user.uid,
-                regNumber: userData.regNumber,
-                department: userData.department,
-                batch: userData.batch,
-                semester: userData.semester,
-              });
-            }
-          } else {
-            // Fallback: Check by email in users collection
-            console.log("⚠️ User doc not found by UID, trying email query...");
-            const usersRef = collection(db, "users");
-            const qUsers = query(usersRef, where("email", "==", user.email));
-            const userSnap = await getDocs(qUsers);
-
-            if (!userSnap.empty) {
-              const userData = userSnap.docs[0].data();
-              console.log("✅ User data found by email:", userData);
-              if (isCurrent()) {
-                setCurrentUser({
-                  name: userData.name || user.displayName || "User",
-                  email: user.email || "",
-                  role: userData.role || "student",
-                  uid: user.uid,
-                  regNumber: userData.regNumber,
-                  department: userData.department,
-                  batch: userData.batch,
-                  semester: userData.semester,
-                });
-              }
-            } else {
-              // Check in admins collection
-              console.log("⚠️ Not in users collection, checking admins...");
-              const adminsRef = collection(db, "admins");
-              const qAdmins = query(
-                adminsRef,
-                where("email", "==", user.email),
-              );
-              const adminSnap = await getDocs(qAdmins);
-
-              if (!adminSnap.empty) {
-                const adminData = adminSnap.docs[0].data();
-                console.log("✅ Admin data found:", adminData);
-                if (isCurrent()) {
-                  setCurrentUser({
-                    name: adminData.name || user.displayName || "Admin",
-                    email: user.email || "",
-                    role: "admin",
-                    uid: user.uid,
-                  });
-                }
-              } else {
-                // Check in parents collection
-                console.log("⚠️ Not in admins, checking parents...");
-                const parentsRef = collection(db, "parents");
-                const qParents = query(
-                  parentsRef,
-                  where("email", "==", user.email),
-                );
-                const parentSnap = await getDocs(qParents);
-
-                if (!parentSnap.empty) {
-                  const parentData = parentSnap.docs[0].data();
-                  console.log("✅ Parent data found:", parentData);
-                  if (isCurrent()) {
-                    setCurrentUser({
-                      name: parentData.name || user.displayName || "Parent",
-                      email: user.email || "",
-                      role: "parent",
-                      uid: user.uid,
-                    });
-                  }
-                } else {
-                  // Fallback: Use Firebase Auth data
-                  console.log(
-                    "⚠️ No Firestore data found, using Auth data as fallback",
-                  );
-                  if (isCurrent()) {
-                    setCurrentUser({
-                      name:
-                        user.displayName || user.email?.split("@")[0] || "User",
-                      email: user.email || "",
-                      role: "student",
-                      uid: user.uid,
-                    });
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error("❌ Error fetching user data:", error);
-          // Fallback to basic auth data
-          if (isCurrent()) {
-            setCurrentUser({
-              name: user.displayName || user.email?.split("@")[0] || "User",
-              email: user.email || "",
-              role: "student",
-              uid: user.uid,
-            });
-          }
-        }
-      } else {
-        console.log("👤 No user logged in, Chatbot will be hidden");
-        setCurrentUser(null);
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser && !userResolutionDone.current) {
+        userResolutionDone.current = true;
+        const resolved = await resolveUser(
+          firebaseUser.uid,
+          firebaseUser.email || "",
+          firebaseUser.displayName
+        );
+        setResolvedUser(resolved);
+      } else if (!firebaseUser) {
+        setResolvedUser(null);
+        userResolutionDone.current = false;
       }
-      setIsLoading(false);
+      setIsLoadingUser(false);
     });
-
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  // Set welcome message when user is loaded or for guest mode
+  // ── Welcome message ───────────────────────
   useEffect(() => {
-    if (messages.length === 0) {
-      if (currentUser) {
-        const roleGreeting =
-          currentUser.role === "admin"
-            ? "your administrative assistant"
-            : currentUser.role === "faculty"
-              ? "your teaching assistant"
-              : currentUser.role === "parent"
-                ? "your child's educational assistant"
-                : "your personalized educational assistant";
-
-        const welcomeMessage: Message = {
+    if (resolvedUser && messages.length === 0) {
+      const roleLabel: Record<Role, string> = {
+        admin: "Administrative Assistant",
+        faculty: "Faculty Assistant",
+        student: "Student Assistant",
+        parent: "Parent Portal Assistant",
+      };
+      setMessages([
+        {
           id: "welcome",
-          text: `Hello ${currentUser.name}! 👋 I'm EduBot, ${roleGreeting}. How can I help you today?`,
+          text: `👋 Hello, **${resolvedUser.name}!**\n\nI'm EduBot — your ${roleLabel[resolvedUser.role]}. I only provide information from the institution's records. Use the quick actions below or type your question.`,
           sender: "bot",
           timestamp: new Date(),
-        };
-        setMessages([welcomeMessage]);
-      }
+        },
+      ]);
     }
-  }, [currentUser, isLoading, messages.length]);
+  }, [resolvedUser, messages.length]);
 
-  const quickActions: QuickAction[] =
-    currentUser?.role === "admin"
-      ? [
-          { label: "👥 Student Info", action: "student_info" },
-          { label: "📊 Department Stats", action: "dept_stats" },
-          { label: "📝 Pending Approvals", action: "approvals" },
-          { label: "📅 Today's Schedule", action: "schedule" },
-          { label: "📈 Analytics", action: "analytics" },
-          { label: "🔔 Notifications", action: "notifications" },
-        ]
-      : currentUser?.role === "faculty"
-        ? [
-            { label: "👥 My Classes", action: "my_classes" },
-            { label: "📝 Assignments", action: "assignments_faculty" },
-            { label: "📊 Student Performance", action: "student_performance" },
-            { label: "📅 My Schedule", action: "schedule" },
-            { label: "🔔 Announcements", action: "announcements" },
-            { label: "📈 Class Analytics", action: "class_analytics" },
-          ]
-        : currentUser?.role === "parent"
-          ? [
-              { label: "👦 Child's Attendance", action: "child_attendance" },
-              { label: "📝 Child's Assignments", action: "child_assignments" },
-              { label: "📊 Child's Results", action: "child_results" },
-              { label: "📅 Child's Schedule", action: "child_schedule" },
-              { label: "💰 Fee Status", action: "fees" },
-              { label: "📞 Contact Teacher", action: "contact_teacher" },
-            ]
-          : [
-              { label: "📚 My Attendance", action: "attendance" },
-              { label: "📝 My Assignments", action: "assignments" },
-              { label: "📊 My Results", action: "results" },
-              { label: "📅 My Timetable", action: "timetable" },
-              { label: "💰 Fee Status", action: "fees" },
-              { label: "📖 Library", action: "library" },
-            ];
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // ── Scroll to bottom ──────────────────────
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ── Focus input on open ───────────────────
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
+    if (isOpen && inputRef.current) inputRef.current.focus();
   }, [isOpen]);
 
-  // Fetch student data by registration number or name
-  const fetchStudentData = async (identifier: string) => {
-    try {
-      const usersRef = collection(db, "users");
-      let q;
+  // ─────────────────────────────────────────
+  // Core message handler
+  // ─────────────────────────────────────────
+  const handleSendMessage = useCallback(
+    async (messageText?: string) => {
+      const text = (messageText || inputValue).trim();
+      if (!text || !resolvedUser) return;
 
-      // Check if identifier is a registration number or name
-      if (identifier.match(/^\d+/)) {
-        q = query(usersRef, where("regNumber", "==", identifier));
-      } else {
-        q = query(usersRef, where("name", "==", identifier));
-      }
+      // Add user message immediately
+      const userMsg: Message = {
+        id: Date.now().toString(),
+        text,
+        sender: "user",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setInputValue("");
+      setIsTyping(true);
 
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        const studentData = snapshot.docs[0].data();
-        return {
-          name: studentData.name,
-          regNumber: studentData.regNumber,
-          email: studentData.email,
-          department: studentData.department,
-          batch: studentData.batch,
-          semester: studentData.semester,
-          attendance: studentData.attendance || "85%",
-          cgpa: studentData.cgpa || "8.5",
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error("Error fetching student data:", error);
-      return null;
-    }
-  };
-
-  const getBotResponse = async (userMessage: string): Promise<string> => {
-    const lowerMessage = userMessage.toLowerCase();
-
-    // Admin-specific queries
-    if (currentUser?.role === "admin") {
-      if (
-        lowerMessage.includes("student") &&
-        (lowerMessage.includes("info") || lowerMessage.includes("details"))
-      ) {
-        const words = userMessage.split(" ");
-        const identifier = words[words.length - 1];
-
-        if (identifier && identifier !== "info" && identifier !== "details") {
-          const studentData = await fetchStudentData(identifier);
-          if (studentData) {
-            return (
-              `📋 **Student Information**\n\n` +
-              `👤 Name: ${studentData.name}\n` +
-              `🎓 Reg No: ${studentData.regNumber}\n` +
-              `📧 Email: ${studentData.email}\n` +
-              `🏢 Department: ${studentData.department}\n` +
-              `📚 Batch: ${studentData.batch}\n` +
-              `📖 Semester: ${studentData.semester}\n` +
-              `📊 Attendance: ${studentData.attendance}\n` +
-              `🎯 CGPA: ${studentData.cgpa}\n\n` +
-              `What else would you like to know?`
-            );
-          } else {
-            return `❌ Student not found. Please provide a valid registration number or full name.\n\nExample: "Show student info 2022CSE001"`;
-          }
-        }
-        return `Please specify the student's registration number or name.\n\nExample: "Show student info 2022CSE001"`;
-      }
-
-      if (
-        lowerMessage.includes("department") ||
-        lowerMessage.includes("dept")
-      ) {
-        return (
-          `📊 **Department Statistics**\n\n` +
-          `🏢 Total Departments: 5\n` +
-          `👥 Total Students: 1,250\n` +
-          `👨🏫 Total Faculty: 85\n\n` +
-          `**Top Departments:**\n` +
-          `1. Computer Science - 450 students\n` +
-          `2. Electronics - 320 students\n` +
-          `3. Mechanical - 280 students\n` +
-          `4. Civil - 150 students\n` +
-          `5. Mathematics - 50 students\n\n` +
-          `Need specific department details?`
-        );
-      }
-
-      if (
-        lowerMessage.includes("approval") ||
-        lowerMessage.includes("pending")
-      ) {
-        return (
-          `📝 **Pending Approvals**\n\n` +
-          `🔴 Urgent (5):\n` +
-          `• Leave applications: 3\n` +
-          `• Fee waivers: 2\n\n` +
-          `🟡 Normal (12):\n` +
-          `• Assignment extensions: 7\n` +
-          `• Certificate requests: 5\n\n` +
-          `Would you like to review them?`
-        );
-      }
-
-      if (lowerMessage.includes("analytic")) {
-        return (
-          `📈 **System Analytics**\n\n` +
-          `**Today's Overview:**\n` +
-          `✅ Active Users: 850/1,250\n` +
-          `📚 Classes Conducted: 45/50\n` +
-          `📝 Assignments Submitted: 320/400\n` +
-          `💰 Fee Collection: 75%\n\n` +
-          `**This Week:**\n` +
-          `📊 Average Attendance: 87%\n` +
-          `🎯 Assignment Completion: 80%\n` +
-          `⭐ Student Satisfaction: 4.5/5`
-        );
-      }
-    }
-
-    // Faculty-specific queries
-    if (currentUser?.role === "faculty") {
-      if (lowerMessage.includes("class") || lowerMessage.includes("my class")) {
-        return (
-          `👥 **Your Classes**\n\n` +
-          `👨🏫 ${currentUser.name}\n\n` +
-          `**Today's Classes:**\n` +
-          `1. 🕐 9:00 AM - 10:30 AM\n` +
-          `   📚 Mathematics - Semester 5\n` +
-          `   🏢 Room 301 | 👥 45 students\n\n` +
-          `2. 🕐 11:00 AM - 12:30 PM\n` +
-          `   📊 Statistics - Semester 3\n` +
-          `   🏢 Room 205 | 👥 38 students\n\n` +
-          `3. 🕑 2:00 PM - 3:30 PM\n` +
-          `   🔢 Calculus - Semester 1\n` +
-          `   🏢 Room 108 | 👥 52 students\n\n` +
-          `📊 Overall Attendance: 87%`
-        );
-      }
-
-      if (lowerMessage.includes("performance")) {
-        return (
-          `📊 **Student Performance Overview**\n\n` +
-          `**Your Classes Average:**\n` +
-          `📈 Class Average: 78.5%\n` +
-          `🎯 Pass Rate: 92%\n` +
-          `⭐ Top Performers: 15 students\n` +
-          `⚠️ Need Attention: 8 students\n\n` +
-          `**Subject-wise:**\n` +
-          `• Mathematics: 82% avg\n` +
-          `• Statistics: 76% avg\n` +
-          `• Calculus: 77% avg\n\n` +
-          `Would you like detailed reports?`
-        );
-      }
-
-      if (lowerMessage.includes("assignment")) {
-        return (
-          `📝 **Assignment Status**\n\n` +
-          `**Pending Review:**\n` +
-          `• Calculus Assignment 3: 45 submissions\n` +
-          `• Statistics Project: 32 submissions\n` +
-          `• Math Quiz 5: 38 submissions\n\n` +
-          `**Upcoming Deadlines:**\n` +
-          `• Math Assignment 4: Jan 25\n` +
-          `• Statistics Quiz: Jan 28\n\n` +
-          `Total pending reviews: 115`
-        );
-      }
-    }
-
-    // Parent-specific queries
-    if (currentUser?.role === "parent") {
-      if (
-        lowerMessage.includes("child") &&
-        lowerMessage.includes("attendance")
-      ) {
-        return (
-          `📚 **Your Child's Attendance**\n\n` +
-          `👦 Student: Rahul Sharma\n` +
-          `🎓 Class: 10th Grade\n` +
-          `📊 Overall Attendance: 88% ✅\n\n` +
-          `**Subject-wise:**\n` +
-          `• Mathematics: 92% ✅\n` +
-          `• Science: 85% ✅\n` +
-          `• English: 90% ✅\n` +
-          `• Social Studies: 82% ✅\n` +
-          `• Hindi: 86% ✅\n\n` +
-          `⚠️ Minimum required: 75%\n` +
-          `Your child is doing well! 🎉`
-        );
-      }
-
-      if (lowerMessage.includes("child") && lowerMessage.includes("result")) {
-        return (
-          `📊 **Your Child's Results**\n\n` +
-          `👦 Student: Rahul Sharma\n` +
-          `🎓 Class: 10th Grade\n\n` +
-          `**Latest Exam Results:**\n` +
-          `• Mathematics: 88/100 (A) 🌟\n` +
-          `• Science: 82/100 (B+) 📈\n` +
-          `• English: 90/100 (A+) 🎉\n` +
-          `• Social Studies: 85/100 (A) ✨\n` +
-          `• Hindi: 87/100 (A) 💪\n\n` +
-          `**Overall:**\n` +
-          `🎯 Percentage: 86.4%\n` +
-          `🏆 Class Rank: 8/60\n\n` +
-          `Great performance! Keep encouraging! 👏`
-        );
-      }
-
-      if (
-        lowerMessage.includes("teacher") ||
-        lowerMessage.includes("contact")
-      ) {
-        return (
-          `📞 **Contact Teachers**\n\n` +
-          `**Class Teacher:**\n` +
-          `👩🏫 Mrs. Priya Patel\n` +
-          `📧 priya.patel@school.edu\n` +
-          `📱 +91 98765 43210\n` +
-          `⏰ Available: Mon-Fri, 2-4 PM\n\n` +
-          `**Subject Teachers:**\n` +
-          `📐 Math: Mr. Rajesh Kumar\n` +
-          `🔬 Science: Dr. Anjali Singh\n` +
-          `📚 English: Ms. Sarah Johnson\n\n` +
-          `Would you like to schedule a meeting?`
-        );
-      }
-
-      if (
-        lowerMessage.includes("child") &&
-        lowerMessage.includes("assignment")
-      ) {
-        return (
-          `📝 **Your Child's Assignments**\n\n` +
-          `👦 Student: Rahul Sharma\n\n` +
-          `**Pending:**\n` +
-          `1. 🔴 Math - Algebra Problems\n` +
-          `   Due: Tomorrow | Status: Not Started\n\n` +
-          `2. 🟡 Science - Lab Report\n` +
-          `   Due: Jan 25 | Status: In Progress\n\n` +
-          `3. 🟢 English - Essay\n` +
-          `   Due: Jan 30 | Status: Not Started\n\n` +
-          `**Completed This Week:** 4\n` +
-          `💡 Please remind about urgent ones!`
-        );
-      }
-    }
-
-    // Student-specific queries
-    if (currentUser?.role === "student") {
-      if (lowerMessage.includes("attendance")) {
-        return (
-          `📚 **Your Attendance Report**\n\n` +
-          `👤 ${currentUser.name}\n` +
-          `🎓 ${currentUser.regNumber}\n\n` +
-          `**Overall Attendance: 85%** ✅\n\n` +
-          `**Subject-wise:**\n` +
-          `• Mathematics: 90% ✅\n` +
-          `• Physics: 82% ✅\n` +
-          `• Chemistry: 88% ✅\n` +
-          `• English: 78% ⚠️\n` +
-          `• Programming: 92% ✅\n\n` +
-          `⚠️ Minimum required: 75%\n` +
-          `You're doing great! Keep it up! 🎉`
-        );
-      }
-
-      if (
-        lowerMessage.includes("assignment") ||
-        lowerMessage.includes("homework")
-      ) {
-        return (
-          `📝 **Your Pending Assignments**\n\n` +
-          `👤 ${currentUser.name}\n\n` +
-          `**Urgent (Due Soon):**\n` +
-          `1. 🔴 Mathematics - Calculus Problems\n` +
-          `   Due: Tomorrow (Jan 23)\n` +
-          `   Status: Not Started\n\n` +
-          `2. 🟡 Physics - Lab Report\n` +
-          `   Due: Jan 25\n` +
-          `   Status: In Progress (50%)\n\n` +
-          `3. 🟢 English - Essay Writing\n` +
-          `   Due: Jan 30\n` +
-          `   Status: Not Started\n\n` +
-          `💡 Tip: Start with the urgent ones!`
-        );
-      }
-
-      if (
-        lowerMessage.includes("result") ||
-        lowerMessage.includes("marks") ||
-        lowerMessage.includes("grade")
-      ) {
-        return (
-          `📊 **Your Latest Results**\n\n` +
-          `👤 ${currentUser.name}\n` +
-          `🎓 ${currentUser.regNumber}\n` +
-          `📚 Semester: ${currentUser.semester || "5"}\n\n` +
-          `**Mid-term Exam Results:**\n` +
-          `• Mathematics: 85/100 (A) 🌟\n` +
-          `• Physics: 78/100 (B+) 📈\n` +
-          `• Chemistry: 92/100 (A+) 🎉\n` +
-          `• English: 88/100 (A) ✨\n` +
-          `• Programming: 95/100 (A+) 🚀\n\n` +
-          `**Overall Performance:**\n` +
-          `🎯 CGPA: 8.76/10\n` +
-          `📊 Percentage: 87.6%\n` +
-          `🏆 Class Rank: 5/120\n\n` +
-          `Excellent work! Keep it up! 💪`
-        );
-      }
-
-      if (
-        lowerMessage.includes("timetable") ||
-        lowerMessage.includes("schedule") ||
-        lowerMessage.includes("class")
-      ) {
-        const today = new Date().toLocaleDateString("en-US", {
-          weekday: "long",
-        });
-        return (
-          `📅 **Your Timetable - ${today}**\n\n` +
-          `👤 ${currentUser.name}\n` +
-          `🏢 ${currentUser.department}\n` +
-          `📚 Semester ${currentUser.semester}\n\n` +
-          `**Today's Classes:**\n` +
-          `⏰ 9:00 AM - 10:30 AM\n` +
-          `   📖 Mathematics (Room 301)\n` +
-          `   👨🏫 Dr. Sarah Johnson\n\n` +
-          `⏰ 10:45 AM - 12:15 PM\n` +
-          `   🔬 Physics Lab (Lab 2)\n` +
-          `   👨🏫 Prof. Michael Chen\n\n` +
-          `⏰ 12:15 PM - 1:00 PM\n` +
-          `   🍽️ Lunch Break\n\n` +
-          `⏰ 1:00 PM - 2:30 PM\n` +
-          `   🧪 Chemistry (Room 205)\n` +
-          `   👩🏫 Dr. Emily Davis\n\n` +
-          `⏰ 2:45 PM - 4:15 PM\n` +
-          `   📚 English (Room 108)\n` +
-          `   👩🏫 Ms. Rachel Green`
-        );
-      }
-
-      if (
-        lowerMessage.includes("fee") ||
-        lowerMessage.includes("payment") ||
-        lowerMessage.includes("dues")
-      ) {
-        return (
-          `💰 **Your Fee Status**\n\n` +
-          `👤 ${currentUser.name}\n` +
-          `🎓 ${currentUser.regNumber}\n\n` +
-          `**Current Semester Fee:**\n` +
-          `💵 Total Fee: ₹50,000\n` +
-          `✅ Paid: ₹30,000\n` +
-          `⏳ Pending: ₹20,000\n` +
-          `📅 Due Date: February 15, 2026\n\n` +
-          `**Payment Options:**\n` +
-          `• Online Payment Portal\n` +
-          `• Bank Transfer\n` +
-          `• Visit Accounts Office\n\n` +
-          `⚠️ Late fee of ₹500 applies after due date`
-        );
-      }
-    }
-
-    // Common queries for all users
-    if (lowerMessage.includes("library") || lowerMessage.includes("book")) {
-      return currentUser?.role === "student"
-        ? `📖 **Your Library Status**\n\n` +
-            `👤 ${currentUser.name}\n\n` +
-            `**Currently Borrowed:**\n` +
-            `1. "Data Structures" - Due: Jan 28\n` +
-            `2. "Physics Fundamentals" - Due: Jan 28\n\n` +
-            `**Library Info:**\n` +
-            `📚 Books Available: 50,000+\n` +
-            `💺 Study Rooms: Available\n` +
-            `⏰ Timings: 8 AM - 8 PM\n` +
-            `🆕 New Arrivals: 15 books in CS\n\n` +
-            `Would you like to renew your books?`
-        : `📖 **Library Overview**\n\n` +
-            `📚 Total Books: 50,000+\n` +
-            `📖 Books Issued: 1,250\n` +
-            `📕 Overdue: 45\n` +
-            `💺 Study Rooms: 8 (6 occupied)\n` +
-            `🆕 New Arrivals This Month: 150\n\n` +
-            `Need specific information?`;
-    }
-
-    // Help/Support queries
-    if (lowerMessage.includes("help") || lowerMessage.includes("support")) {
-      if (currentUser?.role === "admin") {
-        return (
-          `🤝 **Admin Help Menu**\n\n` +
-          `I can help you with:\n` +
-          `👥 Student information lookup\n` +
-          `📊 Department statistics\n` +
-          `📝 Pending approvals\n` +
-          `📈 System analytics\n` +
-          `📅 Schedule management\n` +
-          `🔔 Notifications\n\n` +
-          `**Examples:**\n` +
-          `• "Show student info 2022CSE001"\n` +
-          `• "Department statistics"\n` +
-          `• "Pending approvals"\n` +
-          `• "Show analytics"`
-        );
-      } else if (currentUser?.role === "faculty") {
-        return (
-          `🤝 **Faculty Help Menu**\n\n` +
-          `I can help you with:\n` +
-          `👥 Your classes\n` +
-          `📝 Assignment management\n` +
-          `📊 Student performance\n` +
-          `📅 Your schedule\n` +
-          `🔔 Announcements\n` +
-          `📈 Class analytics\n\n` +
-          `Just ask me anything!`
-        );
-      } else if (currentUser?.role === "parent") {
-        return (
-          `🤝 **Parent Help Menu**\n\n` +
-          `I can help you with:\n` +
-          `👦 Your child's attendance\n` +
-          `📝 Your child's assignments\n` +
-          `📊 Your child's results\n` +
-          `📅 Your child's schedule\n` +
-          `💰 Fee status\n` +
-          `📞 Contact teachers\n\n` +
-          `Just ask me anything!`
-        );
-      } else {
-        return (
-          `🤝 **Student Help Menu**\n\n` +
-          `I can help you with:\n` +
-          `📚 Your attendance\n` +
-          `📝 Your assignments\n` +
-          `📊 Your results\n` +
-          `📅 Your timetable\n` +
-          `💰 Fee status\n` +
-          `📖 Library services\n\n` +
-          `Just ask me anything!`
-        );
-      }
-    }
-
-    // Greeting responses
-    if (
-      lowerMessage.includes("hello") ||
-      lowerMessage.includes("hi") ||
-      lowerMessage.includes("hey")
-    ) {
-      return `Hello ${currentUser?.name || "there"}! 👋 How can I assist you today?`;
-    }
-
-    // Thank you responses
-    if (lowerMessage.includes("thank")) {
-      return `You're welcome, ${currentUser?.name || "there"}! Feel free to ask if you need anything else. Have a great day! 😊`;
-    }
-
-    // Default response based on role
-    if (currentUser?.role === "admin") {
-      return (
-        `I can help you with:\n` +
-        `👥 Student information (e.g., "Show student info 2022CSE001")\n` +
-        `📊 Department statistics\n` +
-        `📝 Pending approvals\n` +
-        `📈 Analytics\n\n` +
-        `What would you like to know?`
-      );
-    } else if (currentUser?.role === "faculty") {
-      return (
-        `I can help you with:\n` +
-        `👥 Your classes\n` +
-        `📝 Assignments\n` +
-        `📊 Student performance\n` +
-        `📅 Your schedule\n\n` +
-        `What would you like to know?`
-      );
-    } else if (currentUser?.role === "parent") {
-      return (
-        `I can help you with:\n` +
-        `👦 Your child's attendance\n` +
-        `📝 Your child's assignments\n` +
-        `📊 Your child's results\n` +
-        `📅 Your child's schedule\n` +
-        `💰 Fee status\n\n` +
-        `What would you like to know?`
-      );
-    } else {
-      return (
-        `I can help you with:\n` +
-        `📚 Your attendance\n` +
-        `📝 Your assignments\n` +
-        `📊 Your results\n` +
-        `📅 Your timetable\n` +
-        `💰 Fee status\n\n` +
-        `What would you like to know?`
-      );
-    }
-  };
-
-  const handleSendMessage = async (messageText?: string) => {
-    const textToSend = messageText || inputValue.trim();
-    if (!textToSend) return;
-
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: textToSend,
-      sender: "user",
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
-    setIsTyping(true);
-
-    // Get bot response
-    try {
-      const botResponse = await getBotResponse(textToSend);
-      setTimeout(() => {
-        const botMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: botResponse,
-          sender: "bot",
-          timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, botMessage]);
+      const addBotMessage = (content: string) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            text: content,
+            sender: "bot",
+            timestamp: new Date(),
+          },
+        ]);
         setIsTyping(false);
-      }, 1000);
-    } catch (error) {
-      console.error("Error getting bot response:", error);
-      setIsTyping(false);
-    }
-  };
+      };
 
-  const handleQuickAction = (action: string) => {
-    const actionMessages: { [key: string]: string } = {
-      // Student actions
-      attendance: "What's my attendance?",
-      assignments: "Show me my assignments",
-      results: "What are my results?",
-      timetable: "Show me today's timetable",
-      fees: "What's my fee status?",
-      library: "Tell me about library",
-      // Admin actions
-      student_info: "Show student information",
-      dept_stats: "Show department statistics",
-      approvals: "Show pending approvals",
-      schedule: "Show today's schedule",
-      analytics: "Show analytics",
-      notifications: "Show notifications",
-      // Faculty actions
-      my_classes: "Show my classes",
-      assignments_faculty: "Show assignment status",
-      student_performance: "Show student performance",
-      class_analytics: "Show class analytics",
-      announcements: "Show announcements",
-      // Parent actions
-      child_attendance: "Show my child's attendance",
-      child_assignments: "Show my child's assignments",
-      child_results: "Show my child's results",
-      child_schedule: "Show my child's schedule",
-      contact_teacher: "How to contact teacher",
-    };
+      try {
+        // ── Step 1: Classify intent (no DB, no AI) ──
+        const intent = classifyIntent(text);
 
-    handleSendMessage(actionMessages[action]);
-  };
+        if (!intent) {
+          addBotMessage(
+            `I can only help you with specific information from the portal.\n\nTry asking about:\n${ROLE_ALLOWED_INTENTS[resolvedUser.role]
+              .map((i) => `• ${i.replace(/_/g, " ")}`)
+              .join("\n")}`
+          );
+          return;
+        }
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        // ── Step 2: Role gate (hard block) ──────────
+        if (!isIntentAllowed(resolvedUser.role, intent)) {
+          addBotMessage(
+            `🔒 Access Denied\n\nYou don't have permission to view that information. As a **${resolvedUser.role}**, you can only access:\n${ROLE_ALLOWED_INTENTS[resolvedUser.role]
+              .map((i) => `• ${i.replace(/_/g, " ")}`)
+              .join("\n")}`
+          );
+          return;
+        }
+
+        // ── Step 3: Fetch data from Firestore ───────
+        let contextData: any = null;
+        try {
+          contextData = await fetchForIntent(intent, resolvedUser);
+        } catch (dbError) {
+          console.error("DB fetch error:", dbError);
+          addBotMessage("⚠️ Could not retrieve data from the server. Please try again.");
+          return;
+        }
+
+        // Serialize history for the API (exclude current message which is sent separately as 'intent')
+        // Optimisation: Only send the last 10 messages to keep context size manageable
+        const chatHistory = messages
+          .filter(m => m.id !== "welcome")
+          .slice(-10) // Sliding window: last 10 messages
+          .map(m => ({
+            role: m.sender === "user" ? "user" : "assistant",
+            content: m.text
+          }));
+
+        // ── Step 4: Call Gemini API (server-side) ───
+        const response = await fetch("/api/edubot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: resolvedUser.role,
+            userName: resolvedUser.name,
+            intent,
+            contextData,
+            chatHistory, // Pass history to backend
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        addBotMessage(data.response || "No response from server.");
+      } catch (error) {
+        console.error("EduBot error:", error);
+        addBotMessage("⚠️ Something went wrong. Please try again.");
+        setIsTyping(false);
+      }
+    },
+    [inputValue, resolvedUser]
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  if (!currentUser) return null;
+  // Don't render if not logged in or session loading
+  if (isLoadingUser || !resolvedUser) return null;
 
+  const quickActions = QUICK_ACTIONS[resolvedUser.role] || [];
+
+  // ─────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────
   return (
     <>
-      {/* Chatbot Toggle Button */}
+      {/* ── Toggle Button ── */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-300 group"
+          className="fixed bottom-6 right-6 z-50 bg-gradient-to-br from-blue-600 via-violet-600 to-purple-700 text-white p-4 rounded-full shadow-xl hover:shadow-2xl transform hover:scale-110 transition-all duration-300 group"
           aria-label="Open EduBot"
         >
-          <FaRobot
-            size={28}
-            className="group-hover:rotate-12 transition-transform"
-          />
-          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse">
+          <FaRobot size={26} className="group-hover:rotate-12 transition-transform duration-300" />
+          <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse shadow-md">
             AI
           </span>
         </button>
       )}
 
-      {/* Chatbot Window */}
+      {/* ── Chat Window ── */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 w-[95vw] sm:w-[450px] h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 animate-slideUp">
+        <div className="fixed bottom-6 right-6 z-50 w-[95vw] sm:w-[440px] h-[620px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-100"
+          style={{ animation: "slideUp 0.25s ease-out" }}
+        >
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-blue-600 via-violet-600 to-purple-700 text-white p-4 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                  <FaRobot size={20} />
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30">
+                  <FaRobot size={18} />
                 </div>
-                <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></span>
+                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white" />
               </div>
               <div>
-                <h3 className="font-bold text-lg">EduBot</h3>
-                <p className="text-xs text-white/80">
-                  {!currentUser
-                    ? "Guest Mode"
-                    : currentUser.role === "admin"
-                      ? "Admin Assistant"
-                      : currentUser.role === "faculty"
-                        ? "Faculty Assistant"
-                        : currentUser.role === "parent"
-                          ? "Parent Assistant"
-                          : "Your Personal Assistant"}
+                <h3 className="font-bold text-sm leading-tight">EduBot</h3>
+                <p className="text-xs text-white/80 flex items-center gap-1">
+                  <FaLock size={9} />
+                  {resolvedUser.role.charAt(0).toUpperCase() + resolvedUser.role.slice(1)} Assistant
                 </p>
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
               className="p-2 hover:bg-white/20 rounded-full transition-colors"
-              aria-label="Close chat"
+              aria-label="Close EduBot"
             >
-              <FaTimes size={20} />
+              <FaTimes size={18} />
             </button>
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-gradient-to-b from-blue-50 to-white p-3 border-b border-gray-200">
-            <p className="text-xs text-gray-600 mb-2 font-medium">
-              Quick Actions:
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {quickActions.map((action, index) => (
+          <div className="bg-gradient-to-b from-slate-50 to-white px-3 py-2.5 border-b border-gray-100 flex-shrink-0">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-2">Quick Actions</p>
+            <div className="flex flex-wrap gap-1.5">
+              {quickActions.map((action) => (
                 <button
-                  key={index}
-                  onClick={() => handleQuickAction(action.action)}
-                  className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-full hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-200 shadow-sm hover:shadow"
+                  key={action.intent}
+                  onClick={() => handleSendMessage(action.label.replace(/^[^\w]+ /, ""))}
+                  disabled={isTyping}
+                  className="text-[11px] bg-white border border-gray-200 text-gray-600 px-2.5 py-1 rounded-full hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-150 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {action.label}
                 </button>
@@ -906,62 +790,55 @@ export default function EduBot() {
             </div>
           </div>
 
-          {/* Messages Container */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-            {messages.map((message) => (
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/60">
+            {messages.map((msg) => (
               <div
-                key={message.id}
-                className={`flex items-start gap-2 ${message.sender === "user" ? "flex-row-reverse" : "flex-row"}`}
+                key={msg.id}
+                className={`flex items-end gap-2 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}
               >
                 {/* Avatar */}
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    message.sender === "bot"
-                      ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
-                      : "bg-gray-300 text-gray-700"
+                  className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${msg.sender === "bot"
+                    ? "bg-gradient-to-br from-blue-500 to-violet-600 text-white"
+                    : "bg-gray-300 text-gray-600"
                   }`}
                 >
-                  {message.sender === "bot" ? (
-                    <FaRobot size={16} />
-                  ) : (
-                    <FaUser size={16} />
-                  )}
+                  {msg.sender === "bot" ? <FaRobot size={13} /> : <FaUser size={13} />}
                 </div>
 
-                {/* Message Bubble */}
+                {/* Bubble */}
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                    message.sender === "user"
-                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-tr-none"
-                      : "bg-white text-gray-800 shadow-sm border border-gray-200 rounded-tl-none"
+                  className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 ${msg.sender === "user"
+                    ? "bg-gradient-to-br from-blue-600 to-violet-600 text-white rounded-br-sm"
+                    : "bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-line leading-relaxed">
-                    {message.text}
-                  </p>
-                  <p
-                    className={`text-xs mt-1 ${message.sender === "user" ? "text-white/70" : "text-gray-500"}`}
-                  >
-                    {message.timestamp.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  {msg.sender === "bot" ? (
+                    <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed prose-headings:font-semibold prose-headings:text-gray-800 prose-h1:text-base prose-h2:text-sm prose-h3:text-sm prose-strong:font-semibold prose-strong:text-gray-900 prose-ul:my-1 prose-ul:pl-4 prose-li:my-0.5 prose-ol:my-1 prose-ol:pl-4 prose-code:text-[11px] prose-code:bg-gray-100 prose-code:text-violet-700 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-lg prose-pre:p-3 prose-pre:text-xs prose-pre:overflow-x-auto prose-pre:my-2 prose-a:text-blue-600 prose-a:underline prose-blockquote:border-l-2 prose-blockquote:border-blue-300 prose-blockquote:pl-2 prose-blockquote:italic prose-blockquote:text-gray-600">
+                      <ReactMarkdown>{msg.text}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed">{msg.text}</p>
+                  )}
+                  <p className={`text-[10px] mt-1 ${msg.sender === "user" ? "text-white/60 text-right" : "text-gray-400"}`}>
+                    {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
               </div>
             ))}
 
-            {/* Typing Indicator */}
+            {/* Typing indicator */}
             {isTyping && (
-              <div className="flex items-start gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white flex items-center justify-center">
-                  <FaRobot size={16} />
+              <div className="flex items-end gap-2">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 text-white flex items-center justify-center">
+                  <FaRobot size={13} />
                 </div>
-                <div className="bg-white rounded-2xl rounded-tl-none px-4 py-3 shadow-sm border border-gray-200">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-gray-100">
+                  <div className="flex gap-1 items-center">
+                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" />
+                    <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:0.15s]" />
+                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce [animation-delay:0.3s]" />
                   </div>
                 </div>
               </div>
@@ -970,31 +847,31 @@ export default function EduBot() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
-          <div className="p-4 bg-white border-t border-gray-200">
+          {/* Input */}
+          <div className="p-3 bg-white border-t border-gray-100 flex-shrink-0">
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about your data..."
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-sm bg-gray-50"
+                disabled={isTyping}
               />
               <button
                 onClick={() => handleSendMessage()}
-                disabled={!inputValue.trim()}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                aria-label="Send message"
+                disabled={!inputValue.trim() || isTyping}
+                className="bg-gradient-to-br from-blue-600 to-violet-600 text-white p-2.5 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+                aria-label="Send"
               >
-                <FaPaperPlane size={18} />
+                <FaPaperPlane size={16} />
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              {currentUser
-                ? `Personalized for ${currentUser.name} • ${currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)}`
-                : "Guest Mode • Please login for personalized experience"}
+            <p className="text-[10px] text-gray-400 mt-1.5 text-center flex items-center justify-center gap-1">
+              <FaLock size={9} />
+              Responses are limited to your role · {resolvedUser.name}
             </p>
           </div>
         </div>
@@ -1002,18 +879,8 @@ export default function EduBot() {
 
       <style jsx>{`
         @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-slideUp {
-          animation: slideUp 0.3s ease-out;
+          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
       `}</style>
     </>
