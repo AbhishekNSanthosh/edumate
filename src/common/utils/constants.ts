@@ -162,49 +162,49 @@ export const parentSideBarMenu: SideBarMenuItem[] = [
     name: "Dashboard",
     link: "dashboard",
     icon: MdSpaceDashboard,
-    rightsToView: ["admin", "faculty", "student","parent"],
+    rightsToView: ["admin", "faculty", "student", "parent"],
   },
   {
     name: "My Ward's Profile",
     link: "my-profile",
     icon: IoMdPerson,
-    rightsToView: ["admin", "faculty", "student","parent"],
+    rightsToView: ["admin", "faculty", "student", "parent"],
   },
   {
     name: "My Ward's Fees",
     link: "my-fees",
     icon: MdPayment,
-    rightsToView: ["admin", "faculty", "student","parent"],
+    rightsToView: ["admin", "faculty", "student", "parent"],
   },
   {
     name: "Attendance",
     link: "attendance",
     icon: IoIosStats,
-    rightsToView: ["admin", "faculty","parent"],
+    rightsToView: ["admin", "faculty", "parent"],
   },
   {
     name: "Assignments",
     link: "assignments",
     icon: MdAssignment,
-    rightsToView: ["admin", "faculty","parent"],
+    rightsToView: ["admin", "faculty", "parent"],
   },
   {
     name: "My ward's Performance",
     link: "performance",
     icon: IoStatsChartSharp,
-    rightsToView: ["admin", "faculty","parent"],
+    rightsToView: ["admin", "faculty", "parent"],
   },
   {
     name: "University Results",
     link: "university-results",
     icon: RiSettings3Fill,
-    rightsToView: ["admin","parent"],
+    rightsToView: ["admin", "parent"],
   },
   {
     name: "Hostel & Transport",
     link: "hostel-and-trans",
     icon: MdOutlineAccountBalance,
-    rightsToView: ["admin","parent"],
+    rightsToView: ["admin", "parent"],
   },
 ];
 
@@ -318,3 +318,327 @@ export const facultySideBarMenu: SideBarMenuItem[] = [
     rightsToView: ["faculty"],
   },
 ];
+
+export const COLLECTIONS = {
+  ADMINS: "admins",
+  ASSIGNMENTS: "assignments",
+  ATTENDANCE: "attendance",
+  BATCHES: "batches",
+  CONVERSATIONS: "conversations",
+  DEPARTMENTS: "departments",
+  EVALUATION_REPORTS: "evaluation_reports",
+  FACULTY: "faculty",
+  FACULTY_ATTENDANCE: "faculty_attendance",
+  FACULTY_DOCUMENTS: "faculty_documents",
+  FACULTY_EXPERIENCE: "faculty_experience",
+  FACULTY_FILES: "faculty_files",
+  FACULTY_LEAVES: "faculty_leaves",
+  FACULTY_PROFILES: "faculty_profiles",
+  FACULTY_TRANSPORT: "faculty_transport",
+  LEAVE_BALANCES: "leave_balances",
+  MESSAGES: "messages",
+  NOTIFICATIONS: "notifications",
+  PARENTS: "parents",
+  SETTINGS: "settings",
+  STUDENT_LEAVES: "student_leaves",
+  STUDENT_SERVICES: "student_services",
+  STUDENTS: "students",
+  SUBJECTS: "subjects",
+  TIMETABLES: "timetables",
+} as const;
+
+export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
+
+// --- Firebase Data Structures ---
+
+export interface Admin {
+  uid?: string; // id is usually the document ID
+  email: string;
+  avatar: string; // URL of the admin avatar
+  role: 'admin'; // Or list other roles if you have them e.g. 'admin' | 'superadmin'
+}
+
+export interface Assignment {
+  id?: string; // id is usually the document ID
+  title: string;
+  description: string;
+  course: string;
+  grade: string;
+  status: string; // e.g. "Graded"
+  studentId: string;
+  dueDate: any; // Firebase Timestamp
+  createdAt: any; // Firebase Timestamp
+}
+
+export interface Attendance {
+  id: string; // Typically corresponds to date + batchId + subjectId
+  batchId: string;
+  subjectId: string;
+  facultyId: string;
+  date: string;
+  records: {
+    studentId: string;
+    studentName: string;
+    status: 'present' | 'absent' | 'late' | 'excused';
+    remarks?: string;
+  }[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Batch {
+  id?: string; // id is usually the document ID
+  name: string; // e.g., "CSE 2024-2028"
+  academicYear: string;
+  department: string;
+  semester: string;
+  status: string; // e.g. "active"
+  tutor: string;
+  createdAt: string; // ISO String based on data
+}
+
+export interface Conversation {
+  id?: string;
+  lastMessage: string;
+  lastMessageTimestamp: any; // Firebase Timestamp
+  participants: string[];
+  participantsDetails: {
+    name: string;
+    role: string;
+    uid: string;
+  }[];
+  unreadCounts: Record<string, number>;
+}
+
+export interface Department {
+  id?: string; // id is usually the document ID
+  code: string;
+  courses: any[]; // Or define a specific type if known
+  createdAt: string; // ISO String based on data
+  faculty: any[]; // Or define a specific type if known
+  hod: string;
+  name: string;
+  status: string; // e.g. "active"
+  students: number;
+}
+
+export interface EvaluationReport {
+  id?: string;
+  cgpa: number;
+  color: string;
+  createdAt: any; // Firebase Timestamp
+  facultyId: string;
+  overallGrade: string;
+  percentage: number;
+  regNumber: string;
+  status: string; // e.g. "passed"
+  student: string;
+  studentId: string;
+  subject: string;
+}
+
+export interface Faculty {
+  uid: string;
+  accessStatus: string; // e.g. "active"
+  authUid: string;
+  createdAt: string; // ISO String based on data
+  department: string;
+  designation: string;
+  email: string;
+  name: string;
+  phone: string;
+  role: string; // e.g. "Tutor"
+  updatedAt: string; // ISO String based on data
+}
+
+export interface FacultyAttendance {
+  id?: string;
+  checkInTime: string;
+  checkOutTime: string;
+  createdAt: string;
+  date: string;
+  facultyId: string;
+}
+
+export interface FacultyDocument {
+  id?: string;
+  createdAt: string;
+  facultyId: string;
+  fileName: string;
+  name: string;
+  status: string; // e.g. "pending"
+  type: string; // e.g. "Experience Certificate"
+  uploadDate: string;
+  url: string;
+}
+
+export interface FacultyExperience {
+  id?: string;
+  createdAt: string;
+  entryType: string; // e.g. "institution"
+  facultyId: string;
+  from: string;
+  institution: string;
+  role: string;
+  to: string;
+  updatedAt: string;
+}
+
+export interface FacultyFile {
+  id?: string; // id is usually the document ID
+  createdAt: any; // Firebase Timestamp
+  folder: string; // e.g. "root"
+  name: string;
+  ownerId: string;
+  size: number;
+  type: string; // e.g. "image/jpeg"
+  url: string;
+}
+
+export interface FacultyLeave {
+  id?: string;
+  appliedDate: string;
+  approvedBy: string;
+  createdAt: any; // Firebase Timestamp
+  days: number;
+  facultyId: string;
+  fromDate: string;
+  reason: string;
+  status: string; // e.g. "pending"
+  toDate: string;
+  type: string; // e.g. "CL"
+}
+
+export interface FacultyProfile {
+  id?: string; // id is usually the document ID (faculty UID)
+  bio: string;
+  department: string;
+  designation: string;
+  displayName: string;
+  email: string;
+  joiningDate: any; // Firebase Timestamp
+  phoneNumber: string;
+  photoUrl: string;
+}
+
+export interface FacultyTransport {
+  id?: string; // id is usually the document ID
+  assignedRoute?: Record<string, any>;
+  dropPoint: string;
+  dueDate: string;
+  facultyId: string;
+  feeDetails?: Record<string, any>;
+  monthlyFee: string;
+  name: string;
+  passNumber: string;
+  paymentDate: string;
+  pickupPoint: string;
+  routeNumber: string;
+  status: string; // e.g. "active" or "paid"
+  transportSchedule?: any[]; // Array of transport schedules maps
+  validity: string;
+}
+
+export interface LeaveBalance {
+  id?: string; // Document ID
+  balance: number;
+  code: string; // e.g., "OD"
+  description: string;
+  facultyId: string;
+  name: string; // e.g. "On Duty"
+}
+
+export interface Message {
+  id?: string; // Document ID
+  content: string;
+  conversationId: string;
+  readBy: string[];
+  senderId: string;
+  senderName: string;
+  timestamp: any; // Firebase Timestamp
+  type: string; // e.g. "text"
+}
+
+export interface Notification {
+  id?: string; // Document ID
+  createdAt: string;
+  message: string;
+  read: boolean;
+  title: string;
+  type: string; // e.g. "info"
+}
+
+export interface Parent {
+  id?: string; // Document ID
+  address: string;
+  email: string;
+  name: string;
+  occupation: string;
+  phone: string;
+  photoUrl: string;
+}
+
+export interface Settings {
+  id: string; // Usually a single document e.g., "app_settings"
+  maintenanceMode: boolean;
+  academicYear: string;
+  currentSemesterType: 'odd' | 'even';
+  features?: Record<string, boolean>; // Togglable features
+  updatedAt?: string;
+}
+
+export interface StudentLeave {
+  id?: string; // Document ID
+  appliedDate: string;
+  approvedBy: string;
+  approvedDate: string;
+  createdAt: any; // Firebase Timestamp
+  days: number;
+  fromDate: string;
+  reason: string;
+  regNumber: string;
+  status: string; // e.g. "rejected"
+  student: string;
+  toDate: string;
+  type: string; // e.g. "Sick Leave"
+}
+
+export interface StudentService {
+  id?: string; // Document ID
+  hostel?: Record<string, any>;
+  transport?: Record<string, any>;
+}
+
+export interface Student {
+  uid?: string; // Document ID
+  address?: Record<string, any>;
+  attendance: string;
+  batch: string;
+  createdAt: string;
+  department: string;
+  email: string;
+  emailNotifications: boolean;
+  info?: Record<string, any>;
+  sessions?: any[]; // Array of session maps
+  settings?: Record<string, any>;
+  status: string; // e.g., "active"
+}
+
+export interface Subject {
+  id?: string; // Document ID
+  code: string; // e.g., "CSE301"
+  createdAt: string;
+  credits: number;
+  department: string;
+  name: string;
+  semester: string; // e.g., "3rd Semester"
+  status: string; // e.g., "active"
+  type: string; // e.g., "Core"
+}
+
+export interface Timetable {
+  id?: string; // Document ID
+  batch: string;
+  createdAt: any; // Firebase Timestamp
+  schedule?: Record<string, string[]>; // e.g., map of day (e.g., "Monday") to an array of subject codes/names
+}
