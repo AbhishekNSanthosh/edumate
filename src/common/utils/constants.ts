@@ -422,7 +422,7 @@ export interface Department {
   students: number;
 }
 
-export interface EvaluationReport {
+export interface EvaluationReport{
   id?: string;
   cgpa: number;
   color: string;

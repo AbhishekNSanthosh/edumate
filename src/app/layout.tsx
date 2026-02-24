@@ -1,10 +1,18 @@
 import React from "react";
 import type { Metadata } from "next";
+import { Poppins } from "next/font/google";
 import "@styles/globals.css";
 import "@styles/scss/main.scss";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "../context/AuthContext";
 import EduBot from "@components/EduBot";
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Edumate",
@@ -17,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className={poppins.variable}>
+      <body style={{ fontFamily: "var(--font-poppins), sans-serif" }}>
         {/* Auth Provider wrapping the app */}
         <AuthProvider>
           {children}
