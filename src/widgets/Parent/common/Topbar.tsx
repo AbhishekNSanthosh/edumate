@@ -13,8 +13,13 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
 import Image from "next/image";
+import { FiMenu } from "react-icons/fi";
 
-export default function Topbar() {
+interface TopbarProps {
+  onMenuToggle?: () => void;
+}
+
+export default function Topbar({ onMenuToggle }: TopbarProps) {
   const { user } = useAuth();
   const [parentData, setParentData] = useState<{
     name?: string;
@@ -103,13 +108,19 @@ export default function Topbar() {
   };
 
   return (
-    <div className="h-[11vh] fixed right-0 top-0 bg-white w-[83vw] flex flex-row items-center justify-between px-[2vw] shadow-sm z-30">
-      <div className="">
-        <span className="font-semibold text-xl text-primary">
+    <div className="h-[11vh] fixed left-0 lg:left-[17vw] top-0 bg-white w-full lg:w-[calc(100vw-17vw)] flex flex-row items-center justify-between px-4 lg:px-[2vw] shadow-sm z-30 border-b border-gray-100">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuToggle}
+          className="lg:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <FiMenu className="text-2xl" />
+        </button>
+        <span className="font-semibold text-base sm:text-xl text-primary truncate max-w-[40vw] sm:max-w-none">
           Welcome, {parentData?.name || "Parent"}! 👋
         </span>
       </div>
-      <div className="flex flex-row gap-5 items-center">
+      <div className="flex flex-row gap-3 sm:gap-5 items-center">
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <div

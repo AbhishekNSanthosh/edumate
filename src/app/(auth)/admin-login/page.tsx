@@ -16,6 +16,7 @@ export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Forgot Password State
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -30,6 +31,7 @@ export default function AdminLogin() {
           const adminDocRef = doc(db, "admins", user.uid);
           const adminDocSnap = await getDoc(adminDocRef);
           if (adminDocSnap.exists()) {
+            setIsRedirecting(true);
             router.replace("/admin/dashboard");
           }
         } catch (e) {
@@ -126,7 +128,7 @@ export default function AdminLogin() {
     }
   };
 
-  if (authLoading)
+  if (authLoading || isRedirecting)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

@@ -10,7 +10,15 @@ import { FiLogOut } from "react-icons/fi";
 import { auth } from "../../../config/firebaseConfig";
 import toast from "react-hot-toast";
 
-export default function Sidebar() {
+interface ParentSidebarProps {
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export default function Sidebar({
+  isMobileOpen,
+  onMobileClose,
+}: ParentSidebarProps) {
   const userRole = "parent";
   const pathname = usePathname();
   const router = useRouter();
@@ -22,7 +30,7 @@ export default function Sidebar() {
   // Filter menu items based on role
   // Note: Assuming parentSideBarMenu items include 'parent' in rightsToView
   const filteredMenu = parentSideBarMenu.filter((item) =>
-    item.rightsToView.includes(userRole)
+    item.rightsToView.includes(userRole),
   );
 
   const handleLogout = () => {
@@ -38,72 +46,95 @@ export default function Sidebar() {
       console.error(err);
       toast.error("Logout failed ❌");
     } finally {
-        setShowLogoutConfirm(false);
+      setShowLogoutConfirm(false);
     }
   };
 
   return (
     <>
-    <div className="w-[17vw] h-screen shadow-sm flex flex-col bg-white fixed left-0 top-0 border-r border-gray-100 z-40">
-      {/* Logo */}
-      <div className="py-6 px-[2vw] border-b border-gray-50 bg-gradient-to-r from-blue-50/50 to-transparent">
-        <Image
-          src="/brand/logo.svg"
-          alt="logo"
-          width={100}
-          height={40}
-          className="h-8 w-auto"
-          priority
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm"
+          onClick={onMobileClose}
         />
-      </div>
+      )}
 
-      {/* Menu Items */}
-      <div className="flex-1 mt-6 space-y-1.5 overflow-y-auto sidebarScroll px-3">
-        {filteredMenu.map((menu) => {
-          const menuPath = `/${pathRole}/${menu.link}`;
-          const isActive = pathname === menuPath;
+      <div
+        className={`w-[75vw] sm:w-[50vw] md:w-[40vw] lg:w-[17vw] h-screen shadow-sm flex flex-col bg-white fixed left-0 top-0 border-r border-gray-100 z-40 transition-transform duration-300 ease-in-out ${
+          isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
+        {/* Logo */}
+        <div className="py-6 px-[2vw] border-b border-gray-50 bg-gradient-to-r from-blue-50/50 to-transparent flex justify-between items-center">
+          <Image
+            src="/brand/logo.svg"
+            alt="logo"
+            width={100}
+            height={40}
+            className="h-8 w-auto"
+            priority
+          />
+          {/* Mobile Close Button */}
+          <button
+            onClick={onMobileClose}
+            className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+          >
+            <FiLogOut className="rotate-180" />{" "}
+            {/* temporary close icon styling */}
+          </button>
+        </div>
 
-          return (
-            <Link
-              key={menu.link}
-              href={menuPath}
-              className={`flex items-center gap-3 h-12 px-4 relative rounded-xl transition-all duration-200 group
-                ${isActive 
-                    ? "bg-blue-50 text-blue-600 font-semibold shadow-sm shadow-blue-100" 
+        {/* Menu Items */}
+        <div className="flex-1 mt-6 space-y-1.5 overflow-y-auto sidebarScroll px-3">
+          {filteredMenu.map((menu) => {
+            const menuPath = `/${pathRole}/${menu.link}`;
+            const isActive = pathname === menuPath;
+
+            return (
+              <Link
+                key={menu.link}
+                href={menuPath}
+                className={`flex items-center gap-3 h-12 px-4 relative rounded-xl transition-all duration-200 group
+                ${
+                  isActive
+                    ? "bg-blue-50 text-blue-600 font-semibold shadow-sm shadow-blue-100"
                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 }
               `}
-            >
-              {/* Active Indicator */}
-              {isActive && (
-                <div className="w-1 h-6 bg-blue-600 absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full"></div>
-              )}
+              >
+                {/* Active Indicator */}
+                {isActive && (
+                  <div className="w-1 h-6 bg-blue-600 absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full"></div>
+                )}
 
-              {/* Icon */}
-              <menu.icon
-                className={`text-xl transition-colors ${
-                  isActive ? "text-blue-600" : "text-gray-400 group-hover:text-gray-600"
-                }`}
-              />
+                {/* Icon */}
+                <menu.icon
+                  className={`text-xl transition-colors ${
+                    isActive
+                      ? "text-blue-600"
+                      : "text-gray-400 group-hover:text-gray-600"
+                  }`}
+                />
 
-              {/* Label */}
-              <span className="truncate text-sm">{menu.name}</span>
-            </Link>
-          );
-        })}
+                {/* Label */}
+                <span className="truncate text-sm">{menu.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all duration-200 shadow-sm text-sm font-medium group"
+          >
+            <FiLogOut className="text-lg text-gray-400 group-hover:text-red-500 transition-colors" />
+            Logout
+          </button>
+        </div>
       </div>
-
-      {/* Logout Button */}
-      <div className="p-4 border-t border-gray-100 bg-gray-50/50">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all duration-200 shadow-sm text-sm font-medium group"
-        >
-          <FiLogOut className="text-lg text-gray-400 group-hover:text-red-500 transition-colors" />
-          Logout
-        </button>
-      </div>
-    </div>
 
       {/* Custom Logout Confirmation Modal */}
       {showLogoutConfirm && (
@@ -113,7 +144,9 @@ export default function Sidebar() {
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                 <FiLogOut className="h-6 w-6 text-red-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Logout</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                Confirm Logout
+              </h3>
               <p className="text-sm text-gray-500 mb-6">
                 Are you sure you want to end your current session?
               </p>

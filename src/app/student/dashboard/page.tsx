@@ -228,20 +228,16 @@ export default function Dashboard() {
     }
   };
 
-  // Helper to render timetable rows
+  // Helper to render timetable rows (desktop table)
   const renderTimetable = () => {
     const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    const defaultSchedule = [
-      ["No Data", "-", "-", "-", "-", "Lunch", "-", "-", "-"],
-    ];
-
     const scheduleData = timetable?.schedule || {};
 
     return days.map((day, i) => {
       const slots = scheduleData[day] || Array(8).fill("-");
       return (
         <tr key={i} className="hover:bg-gray-50 transition-colors">
-          <td className="px-4 py-3 font-medium text-gray-900 bg-gray-50">
+          <td className="px-4 py-3 font-medium text-gray-900 bg-gray-50 whitespace-nowrap">
             {day}
           </td>
           {slots.map((cell: string, j: number) => (
@@ -254,6 +250,41 @@ export default function Dashboard() {
             </td>
           ))}
         </tr>
+      );
+    });
+  };
+
+  // Mobile card view for timetable
+  const renderTimetableCards = () => {
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const scheduleData = timetable?.schedule || {};
+
+    return days.map((day, i) => {
+      const slots: string[] = scheduleData[day] || Array(8).fill("-");
+      return (
+        <div key={i} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-100">
+            <span className="font-semibold text-gray-800 text-sm">{day}</span>
+          </div>
+          <div className="grid grid-cols-4 divide-x divide-y divide-gray-100">
+            {slots.map((cell: string, j: number) => (
+              <div key={j} className="flex flex-col items-center py-2 px-1 gap-1">
+                <span className="text-[10px] text-gray-400 font-medium">H{j + 1}</span>
+                <span
+                  className={`text-[11px] font-medium px-1.5 py-0.5 rounded text-center leading-tight ${
+                    cell === "Lunch"
+                      ? "bg-gray-100 text-gray-500"
+                      : cell === "-"
+                      ? "text-gray-300"
+                      : "bg-blue-50 text-blue-700"
+                  }`}
+                >
+                  {cell}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       );
     });
   };
@@ -374,7 +405,13 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile card view */}
+            <div className="md:hidden p-4 space-y-3">
+              {renderTimetableCards()}
+            </div>
+
+            {/* Desktop table view */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>

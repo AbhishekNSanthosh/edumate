@@ -2,10 +2,45 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import React from 'react'
+import React, { useEffect, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { db } from '../config/firebaseConfig'
+import { doc, getDoc } from 'firebase/firestore'
 
 export default function Home() {
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
+  const [checking, setChecking] = useState(false)
+
+  useEffect(() => {
+    if (authLoading || !user) return
+
+    const detectAndRedirect = async () => {
+      setChecking(true)
+      try {
+        const adminSnap = await getDoc(doc(db, 'admins', user.uid))
+        if (adminSnap.exists()) { router.replace('/admin/dashboard'); return }
+
+        const facultySnap = await getDoc(doc(db, 'faculty', user.uid))
+        if (facultySnap.exists()) { router.replace('/faculty/dashboard'); return }
+
+        const studentSnap = await getDoc(doc(db, 'students', user.uid))
+        if (studentSnap.exists()) { router.replace('/student/dashboard'); return }
+      } catch (e) {
+        console.error('Role detection error:', e)
+      } finally {
+        setChecking(false)
+      }
+    }
+
+    detectAndRedirect()
+  }, [user, authLoading, router])
+
+  if (authLoading || checking) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
+  )
 
   const roles = [
     { id: 'admin', label: 'Admin', icon: '👨‍💼', color: 'from-purple-500 to-indigo-600' },

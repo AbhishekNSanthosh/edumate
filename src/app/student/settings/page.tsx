@@ -57,6 +57,11 @@ export default function SettingsPage() {
     language: "English",
   });
 
+  // Apply dark mode class to <html> whenever preference changes
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", preferences.darkMode);
+  }, [preferences.darkMode]);
+
   // 1. Listen to Real-time Profile/Settings Data
   useEffect(() => {
     if (!user) return;
@@ -395,7 +400,7 @@ export default function SettingsPage() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     New Password

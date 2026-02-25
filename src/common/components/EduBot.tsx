@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import {
   FaRobot,
@@ -83,7 +84,7 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
   ],
   results: ["result", "marks", "grade", "cgpa", "performance", "score", "exam"],
   notifications: ["notification", "notice", "announcement", "alert"],
-  profile: ["profile", "my info", "my details", "my data", "who am i"],
+  profile: ["profile", "my info", "my details", "my data", "who am i", "my name", "what's my name", "what is my name", "tell me my name", "my email", "my roll", "my id"],
   students: [
     "student list",
     "students in batch",
@@ -463,7 +464,19 @@ async function fetchForIntent(
     case "profile": {
       if (user.role === "student") {
         const snap = await getDoc(doc(db, "students", user.uid));
-        return snap.exists() ? snap.data() : null;
+        if (snap.exists()) {
+          const d = snap.data();
+          return {
+            name: d.name,
+            email: d.email,
+            phone: d.phone,
+            regNumber: d.regNumber,
+            batchId: d.batchId,
+            bloodGroup: d.bloodGroup,
+            dob: d.dob,
+          };
+        }
+        return null;
       }
       if (user.role === "faculty") {
         const [profileSnap, facultySnap] = await Promise.all([
@@ -481,10 +494,19 @@ async function fetchForIntent(
         };
       }
       if (user.role === "parent") {
-        // Parents may be stored by email — try email-based query
         const q = query(col(db, "parents"), where("email", "==", user.email));
         const snap = await getDocs(q);
-        return snap.empty ? null : snap.docs[0].data();
+        if (!snap.empty) {
+          const d = snap.docs[0].data();
+          return {
+            name: d.name,
+            email: d.email,
+            phone: d.phone,
+            studentName: d.studentName,
+            relation: d.relation,
+          };
+        }
+        return null;
       }
       if (user.role === "admin") {
         // Admins: try by email since admins collection structure may vary
@@ -612,8 +634,38 @@ async function resolveUser(
   uid: string,
   email: string,
   displayName: string | null,
+  roleOverride?: "parent",
 ): Promise<ResolvedUser | null> {
   try {
+    // 0. Explicit Override (Parent Portal)
+    if (roleOverride === "parent") {
+      const parentSnap = await getDocs(
+        query(collection(db, "parents"), where("email", "==", email)),
+      );
+      if (!parentSnap.empty) {
+        const data = parentSnap.docs[0].data();
+        const childUid = data.childUid || data.studentUid || null;
+        let childName: string | undefined;
+
+        if (childUid) {
+          const childDoc = await getDoc(doc(db, "students", childUid));
+          if (childDoc.exists()) {
+            childName = childDoc.data().name;
+          }
+        }
+
+        return {
+          uid,
+          name: data.name || displayName || "Parent",
+          email,
+          role: "parent",
+          childUid,
+          childName,
+        };
+      }
+      return null;
+    }
+
     // 1. Check students — doc ID IS the Firebase Auth UID
     const studentDoc = await getDoc(doc(db, "students", uid));
     if (studentDoc.exists()) {
@@ -733,6 +785,7 @@ type MicState = "idle" | "listening" | "processing";
 // EduBot Component
 // ─────────────────────────────────────────────
 export default function EduBot() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -760,10 +813,16 @@ export default function EduBot() {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser && !userResolutionDone.current) {
         userResolutionDone.current = true;
+
+        const path =
+          typeof window !== "undefined" ? window.location.pathname : "";
+        const roleOverride = path.includes("/parent") ? "parent" : undefined;
+
         const resolved = await resolveUser(
           firebaseUser.uid,
           firebaseUser.email || "",
           firebaseUser.displayName,
+          roleOverride,
         );
         setResolvedUser(resolved);
       } else if (!firebaseUser) {
@@ -1012,8 +1071,9 @@ export default function EduBot() {
     }
   };
 
-  // Don't render if not logged in or session loading
-  if (isLoadingUser || !resolvedUser) return null;
+  // Don't render on home or login pages, or if not logged in
+  const isAuthPage = pathname === "/" || pathname?.includes("-login");
+  if (isLoadingUser || !resolvedUser || isAuthPage) return null;
 
   const quickActions = QUICK_ACTIONS[resolvedUser.role] || [];
 
@@ -1118,7 +1178,7 @@ export default function EduBot() {
 
                 {/* Bubble */}
                 <div
-                  className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 ${
+                  className={`max-w-[78%] min-w-0 overflow-hidden break-words rounded-2xl px-3.5 py-2.5 ${
                     msg.sender === "user"
                       ? "bg-gradient-to-br from-blue-600 to-violet-600 text-white rounded-br-sm"
                       : "bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm"

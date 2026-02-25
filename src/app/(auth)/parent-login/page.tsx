@@ -12,11 +12,12 @@ export default function ParentLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     if (!authLoading && user) {
-      // Redirect to Parent dashboard
+      setIsRedirecting(true);
       router.replace("/parent/dashboard");
     }
   }, [user, authLoading, router]);
@@ -74,7 +75,7 @@ export default function ParentLogin() {
     }
   };
 
-  if (authLoading)
+  if (authLoading || isRedirecting)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

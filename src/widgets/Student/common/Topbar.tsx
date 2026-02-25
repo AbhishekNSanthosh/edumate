@@ -14,8 +14,13 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
 import { IoTimeOutline, IoClose } from "react-icons/io5";
+import { FiMenu } from "react-icons/fi";
 
-export default function Topbar() {
+interface TopbarProps {
+  onMenuToggle?: () => void;
+}
+
+export default function Topbar({ onMenuToggle }: TopbarProps) {
   const { user } = useAuth();
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
@@ -114,9 +119,18 @@ export default function Topbar() {
   };
 
   return (
-    <div className="h-[11vh] fixed bg-white w-[82vw] flex flex-row items-center justify-between px-[2vw] shadow-sm z-50">
-      <div className="">
-        <span className="font-semibold text-xl text-primary capitalize">
+    <div className="h-[11vh] fixed left-0 lg:left-[17vw] w-full lg:w-[calc(100vw-17vw)] bg-white flex flex-row items-center justify-between px-4 lg:px-[2vw] z-40 border-b border-gray-100">
+      <div className="flex items-center gap-3">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onMenuToggle}
+          className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+          aria-label="Open menu"
+        >
+          <FiMenu size={22} />
+        </button>
+
+        <span className="font-semibold text-base sm:text-xl text-primary capitalize truncate max-w-[45vw] sm:max-w-none">
           Welcome,{" "}
           {(
             userName ||
