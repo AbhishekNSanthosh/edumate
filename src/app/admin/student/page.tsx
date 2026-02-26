@@ -132,14 +132,74 @@ export default function page() {
         const studentRef = collection(db, "students");
 
         let count = 0;
-        data.forEach((student: any) => {
+
+        // Let's create a map to keep track of highest sequence numbers by dept and year to allow bulk inserts smoothly
+        const nextIdMap: { [key: string]: number } = {};
+
+        for (const student of data as any[]) {
+          let regNumber =
+            student["Admission No"] ||
+            student["Admission Number"] ||
+            student.AdmissionNo ||
+            student.RegNumber ||
+            student.regNumber ||
+            student["Register Number"];
+
+          if (!regNumber) {
+            const studentDept = student.Department || student.department || "";
+            let deptCode = studentDept.substring(0, 3).toUpperCase();
+            if (studentDept.toLowerCase().includes("computer")) deptCode = "CS";
+            if (studentDept.toLowerCase().includes("mechanical"))
+              deptCode = "ME";
+            if (studentDept.toLowerCase().includes("civil")) deptCode = "CE";
+            if (studentDept.toLowerCase().includes("electrical"))
+              deptCode = "EEE";
+            if (studentDept.toLowerCase().includes("electronics"))
+              deptCode = "ECE";
+
+            const batchRaw = student.Batch || student.batch || "";
+            const yearMatch = String(batchRaw).match(/\d{4}/);
+            const year = yearMatch
+              ? yearMatch[0]
+              : new Date().getFullYear().toString();
+
+            const mapKey = `${deptCode}_${year}`;
+
+            // Only fetch max once per deptCode+year pair during upload
+            if (nextIdMap[mapKey] === undefined) {
+              nextIdMap[mapKey] = 1000;
+              const q = query(
+                collection(db, "students"),
+                orderBy("createdAt", "desc"),
+              );
+              // In a simple system we just loop the whole state to find the max - `students` is stored in state!
+              students.forEach((s) => {
+                const r = s.regNumber || "";
+                if (r.includes(deptCode) && r.includes(year)) {
+                  const parts = r.split("/");
+                  if (parts.length > 0 && !isNaN(parseInt(parts[0]))) {
+                    nextIdMap[mapKey] = Math.max(
+                      nextIdMap[mapKey],
+                      parseInt(parts[0]),
+                    );
+                  }
+                }
+              });
+            }
+
+            nextIdMap[mapKey]++;
+            regNumber = `${nextIdMap[mapKey]}/${deptCode}/${year}`;
+          }
+
           const newDocRef = doc(studentRef); // Auto-ID
           batch.set(newDocRef, {
             name: student.Name || student.name,
-            regNumber:
-              student.RegNumber ||
-              student.regNumber ||
-              student["Register Number"],
+            regNumber: regNumber,
+            uniRegNumber:
+              student["University Reg No"] ||
+              student.uniRegNumber ||
+              student.UniRegNumber ||
+              "",
             email: student.Email || student.email,
             department: student.Department || student.department,
             status: "active",
@@ -147,7 +207,7 @@ export default function page() {
             createdAt: new Date().toISOString(),
           });
           count++;
-        });
+        }
 
         await batch.commit();
         toast.success(`Successfully added ${count} students`);
@@ -159,6 +219,8 @@ export default function page() {
     };
     reader.readAsBinaryString(file);
   };
+
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Filter students based on selected department
   const filteredStudents = selectedDept
@@ -173,17 +235,12 @@ export default function page() {
         </button>
       </Link>
 
-      <div className="relative">
-        <input
-          type="file"
-          accept=".csv, .xlsx, .xls"
-          onChange={handleBulkUpload}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        />
-        <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-          Upload CSV/Excel
-        </button>
-      </div>
+      <button
+        onClick={() => setShowUploadModal(true)}
+        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+      >
+        Upload CSV/Excel
+      </button>
 
       <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors">
         Export Data
@@ -360,11 +417,16 @@ export default function page() {
                   <tr key={student.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {student.regNumber}
-                      </div>
-                      <div className="text-sm text-gray-500">
                         {student.name}
                       </div>
+                      <div className="text-xs text-gray-500 font-mono mt-0.5">
+                        {student.regNumber}
+                      </div>
+                      {student.uniRegNumber && (
+                        <div className="text-xs text-blue-600 font-mono mt-0.5 font-medium">
+                          {student.uniRegNumber}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">
@@ -455,6 +517,128 @@ export default function page() {
           </div>
         </div>
       </div>
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm"
+            onClick={() => setShowUploadModal(false)}
+          />
+          {/* Modal Body */}
+          <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+              <h2 className="text-xl font-bold text-gray-800">
+                Bulk Upload Students
+              </h2>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[70vh] bg-gray-50/50">
+              <p className="text-gray-600 mb-6 text-sm">
+                Upload a CSV or Excel file containing your student records. The
+                file should have a header row with the following column names.
+                The system will automatically generate standard{" "}
+                <strong>Register Numbers</strong> if left blank based on
+                Department and Batch.
+              </p>
+
+              <div className="bg-white border text-sm border-gray-200 rounded-lg overflow-hidden mb-6">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 font-semibold text-gray-700">
+                  Expected File Structure
+                </div>
+                <div className="p-4 space-y-3 font-mono text-xs text-gray-600">
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      Name
+                    </span>
+                    <span>(Required) Full name of the student</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      Email
+                    </span>
+                    <span>(Required) Primary email address</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      Department
+                    </span>
+                    <span>(Required) e.g., Computer Science, Mechanical</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      Batch
+                    </span>
+                    <span>(Required) e.g., 2024-2028</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      University Reg No
+                    </span>
+                    <span className="text-blue-600">
+                      (Optional) e.g., CMA22CS003
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      Roll Number
+                    </span>
+                    <span className="text-blue-600">
+                      (Optional) Internal class roll
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-bold text-gray-900 min-w-[150px]">
+                      Admission No.
+                    </span>
+                    <span className="text-blue-600">
+                      (Optional) Auto-generated if blank
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 flex flex-col items-center justify-center border-dashed relative hover:bg-blue-100/50 transition-colors">
+                <svg
+                  className="w-10 h-10 text-blue-500 mb-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                <span className="text-blue-700 font-semibold mb-1">
+                  Click to browse files
+                </span>
+                <span className="text-blue-500/80 text-xs">
+                  Supports .xlsx, .xls, .csv
+                </span>
+                <input
+                  type="file"
+                  id="file-upload"
+                  accept=".csv, .xlsx, .xls"
+                  onChange={(e) => {
+                    handleBulkUpload(e);
+                    setShowUploadModal(false);
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
