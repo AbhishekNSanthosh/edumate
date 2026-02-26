@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   collection,
   deleteDoc,
@@ -7,29 +7,52 @@ import {
   updateDoc,
   writeBatch,
   getDocs,
-  query,
-  orderBy,
 } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db } from "../../../../src/config/firebaseConfig";
 import Link from "next/link";
 import Skeleton from "../../../common/components/Skeleton";
 import toast from "react-hot-toast";
-import { HiTrash, HiCheckCircle, HiXCircle } from "react-icons/hi2";
+import {
+  HiTrash,
+  HiXCircle,
+  HiMagnifyingGlass,
+  HiPencil,
+} from "react-icons/hi2";
 
-export default function page() {
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+export default function StudentPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedDept, setSelectedDept] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- Bulk Selection State ---
+  // --- Search ---
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState<
+    | "all"
+    | "name"
+    | "regNumber"
+    | "uniRegNumber"
+    | "email"
+    | "phone"
+    | "batch"
+    | "rollNumber"
+  >("all");
+
+  // --- Pagination ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // --- Bulk Selection ---
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // --- Upload Progress State ---
+  // --- Upload ---
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
     active: boolean;
     total: number;
@@ -38,6 +61,7 @@ export default function page() {
     current: string;
   }>({ active: false, total: 0, done: 0, failed: [], current: "" });
 
+  // ── Fetch ──
   const fetchStudents = async () => {
     setLoading(true);
     setError(null);
@@ -62,11 +86,6 @@ export default function page() {
       console.error("Fetch error:", err);
       setError(err.message);
       toast.error("Failed to load data: " + err.message);
-      if (err.code === "permission-denied") {
-        toast.error("Check your Firestore Security Rules!");
-      } else if (err.code === "unavailable") {
-        toast.error("Network unavailable or Firestore offline");
-      }
     } finally {
       setLoading(false);
     }
@@ -79,48 +98,78 @@ export default function page() {
     fetchStudents().finally(() => clearTimeout(timeoutId));
   }, []);
 
-  // --- Filter ---
-  const filteredStudents = selectedDept
-    ? students.filter((s) => s.department === selectedDept)
-    : students;
+  // ── Filter + Search (memoized) ──
+  // Coerce to String() first — Firestore may store phone/batch as numbers
+  const toStr = (v: any) => String(v ?? "").toLowerCase();
 
-  // --- Selection Helpers ---
-  const allFilteredSelected =
-    filteredStudents.length > 0 &&
-    filteredStudents.every((s) => selectedIds.has(s.id));
+  const filteredStudents = useMemo(() => {
+    let list = selectedDept
+      ? students.filter((s) => s.department === selectedDept)
+      : students;
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s) => {
+        if (searchField === "all") {
+          return (
+            toStr(s.name).includes(q) ||
+            toStr(s.regNumber).includes(q) ||
+            toStr(s.uniRegNumber).includes(q) ||
+            toStr(s.email).includes(q) ||
+            toStr(s.phone).includes(q) ||
+            toStr(s.batch).includes(q) ||
+            toStr(s.rollNumber).includes(q)
+          );
+        }
+        return toStr(s[searchField]).includes(q);
+      });
+    }
+    return list;
+  }, [students, selectedDept, searchQuery, searchField]);
+
+  // ── Pagination ──
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pagedStudents = filteredStudents.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, searchField, selectedDept, pageSize]);
+
+  // ── Selection helpers ──
+  const allPageSelected =
+    pagedStudents.length > 0 &&
+    pagedStudents.every((s) => selectedIds.has(s.id));
 
   const someSelected = selectedIds.size > 0;
 
   const toggleSelectAll = () => {
-    if (allFilteredSelected) {
-      // Deselect all filtered
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        filteredStudents.forEach((s) => next.delete(s.id));
-        return next;
-      });
-    } else {
-      // Select all filtered
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        filteredStudents.forEach((s) => next.add(s.id));
-        return next;
-      });
-    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        pagedStudents.forEach((s) => next.delete(s.id));
+      } else {
+        pagedStudents.forEach((s) => next.add(s.id));
+      }
+      return next;
+    });
   };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  // --- Individual Delete ---
+  // ── Individual Delete ──
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this student?")) return;
     try {
@@ -138,14 +187,12 @@ export default function page() {
     }
   };
 
-  // --- Bulk Delete ---
+  // ── Bulk Delete ──
   const handleBulkDelete = async () => {
     setBulkDeleteLoading(true);
     try {
       const batch = writeBatch(db);
-      selectedIds.forEach((id) => {
-        batch.delete(doc(db, "students", id));
-      });
+      selectedIds.forEach((id) => batch.delete(doc(db, "students", id)));
       await batch.commit();
       const count = selectedIds.size;
       setStudents((prev) => prev.filter((s) => !selectedIds.has(s.id)));
@@ -162,6 +209,7 @@ export default function page() {
     }
   };
 
+  // ── Status toggle ──
   const toggleStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === "active" ? "withdrawn" : "active";
     try {
@@ -176,19 +224,44 @@ export default function page() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    return status === "active"
-      ? "bg-green-100 text-green-800 border-green-200"
-      : "bg-red-100 text-red-800 border-red-200";
+  // ── Export ──
+  const handleExport = () => {
+    const toExport = someSelected
+      ? students.filter((s) => selectedIds.has(s.id))
+      : filteredStudents;
+    if (toExport.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(
+      toExport.map((s) => ({
+        Name: s.name,
+        "Reg Number": s.regNumber,
+        "Uni Reg No": s.uniRegNumber,
+        "Roll Number": s.rollNumber,
+        Email: s.email,
+        Phone: s.phone,
+        Department: s.department,
+        Batch: s.batch,
+        Attendance: s.attendance,
+        Status: s.status,
+      })),
+    );
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+    XLSX.writeFile(wb, "students_data.xlsx");
+    toast.success(
+      someSelected
+        ? `Exported ${toExport.length} selected records`
+        : "Export successful!",
+    );
   };
 
-  // ── Bulk Upload: creates Auth account + Firestore docs per student ──
+  // ── Bulk Upload ──
   const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Reset input so same file can be re-selected later
     e.target.value = "";
-
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -196,23 +269,18 @@ export default function page() {
         const wb = XLSX.read(bstr, { type: "binary" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws) as any[];
-
         if (data.length === 0) {
           toast.error("File is empty");
           return;
         }
-
-        // Validate required columns exist
         const first = data[0];
-        const hasEmail = "Email" in first || "email" in first;
-        const hasPassword = "Password" in first || "password" in first;
-        if (!hasEmail || !hasPassword) {
-          toast.error(
-            "File must have 'Email' and 'Password' columns for account creation",
-          );
+        if (
+          !("Email" in first || "email" in first) ||
+          !("Password" in first || "password" in first)
+        ) {
+          toast.error("File must have 'Email' and 'Password' columns");
           return;
         }
-
         setShowUploadModal(false);
         setUploadProgress({
           active: true,
@@ -221,19 +289,15 @@ export default function page() {
           failed: [],
           current: "",
         });
-
         const nextIdMap: { [key: string]: number } = {};
         let successCount = 0;
-
         for (const student of data) {
           const name = student.Name || student.name || "Unknown";
           const email = student.Email || student.email || "";
           const password = student.Password || student.password || "";
           const studentDept = student.Department || student.department || "";
           const batchRaw = student.Batch || student.batch || "";
-
           setUploadProgress((p) => ({ ...p, current: name }));
-
           if (!email || !password) {
             setUploadProgress((p) => ({
               ...p,
@@ -251,13 +315,11 @@ export default function page() {
               done: p.done + 1,
               failed: [
                 ...p.failed,
-                { name, reason: "Password too short (min 6 chars)" },
+                { name, reason: "Password too short (min 6)" },
               ],
             }));
             continue;
           }
-
-          // Auto-generate reg number if absent
           let regNumber =
             student["Admission No"] ||
             student["Admission Number"] ||
@@ -265,7 +327,6 @@ export default function page() {
             student.RegNumber ||
             student.regNumber ||
             student["Register Number"];
-
           if (!regNumber) {
             let deptCode = studentDept.substring(0, 3).toUpperCase();
             if (studentDept.toLowerCase().includes("computer")) deptCode = "CS";
@@ -298,9 +359,7 @@ export default function page() {
             nextIdMap[mapKey]++;
             regNumber = `${nextIdMap[mapKey]}/${deptCode}/${year}`;
           }
-
           try {
-            // 1. Create Firebase Auth account via server-side API
             const res = await fetch("/api/create-student-account", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -309,15 +368,8 @@ export default function page() {
             const result = await res.json();
             if (!res.ok)
               throw new Error(result.error || "Account creation failed");
-
             const uid: string = result.uid;
-
-            // 2. Create student document (ID = Auth UID)
-            const {
-              setDoc,
-              doc: fsDoc,
-              addDoc: fsAddDoc,
-            } = await import("firebase/firestore");
+            const { setDoc, doc: fsDoc } = await import("firebase/firestore");
             await setDoc(fsDoc(db, "students", uid), {
               name,
               regNumber,
@@ -337,8 +389,6 @@ export default function page() {
               uid,
               createdAt: new Date().toISOString(),
             });
-
-            // 3. Create parent profile
             await setDoc(fsDoc(db, "parents", uid), {
               studentId: uid,
               studentName: name,
@@ -347,35 +397,31 @@ export default function page() {
               role: "parent",
               createdAt: new Date().toISOString(),
             });
-
             successCount++;
             setUploadProgress((p) => ({ ...p, done: p.done + 1 }));
           } catch (err: any) {
-            const reason = err.message || "Unknown error";
             setUploadProgress((p) => ({
               ...p,
               done: p.done + 1,
-              failed: [...p.failed, { name, reason }],
+              failed: [
+                ...p.failed,
+                { name, reason: err.message || "Unknown error" },
+              ],
             }));
           }
         }
-
-        // Upload complete
         setUploadProgress((p) => ({ ...p, active: false, current: "" }));
-
         if (successCount > 0) {
           toast.success(
             `✅ ${successCount} student account${successCount > 1 ? "s" : ""} created!`,
           );
           fetchStudents();
         }
-        if (data.length - successCount > 0 && successCount < data.length) {
+        if (data.length - successCount > 0 && successCount < data.length)
           toast.error(
-            `⚠️ ${data.length - successCount} student${data.length - successCount > 1 ? "s" : ""} failed — check summary.`,
+            `⚠️ ${data.length - successCount} failed — check summary.`,
           );
-        }
       } catch (error: any) {
-        console.error("Bulk upload error:", error);
         toast.error("Failed to process file: " + error.message);
         setUploadProgress((p) => ({ ...p, active: false }));
       }
@@ -383,7 +429,10 @@ export default function page() {
     reader.readAsBinaryString(file);
   };
 
-  const [showUploadModal, setShowUploadModal] = useState(false);
+  const getStatusColor = (status: string) =>
+    status === "active"
+      ? "bg-green-100 text-green-800 border-green-200"
+      : "bg-red-100 text-red-800 border-red-200";
 
   const totalActive = filteredStudents.filter(
     (s) => s.status === "active",
@@ -396,6 +445,35 @@ export default function page() {
         ) / filteredStudents.length
       : 0;
 
+  // ── Pagination page range helper ──
+  const getPageRange = () => {
+    const delta = 2;
+    const range: (number | "...")[] = [];
+    for (
+      let i = Math.max(2, safePage - delta);
+      i <= Math.min(totalPages - 1, safePage + delta);
+      i++
+    )
+      range.push(i);
+    if (safePage - delta > 2) range.unshift("...");
+    if (safePage + delta < totalPages - 1) range.push("...");
+    if (totalPages > 1) range.unshift(1);
+    if (totalPages > 1) range.push(totalPages);
+    return Array.from(new Set(range));
+  };
+
+  const searchFieldLabels: Record<string, string> = {
+    all: "All Fields",
+    name: "Name",
+    regNumber: "Admission No.",
+    uniRegNumber: "University Reg No.",
+    email: "Email",
+    phone: "Phone",
+    batch: "Batch",
+    rollNumber: "Roll Number",
+  };
+
+  // ── Loading ──
   if (loading)
     return (
       <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
@@ -405,42 +483,20 @@ export default function page() {
             <Skeleton className="h-6 w-96" />
           </div>
           <div className="flex flex-wrap items-center gap-4 mb-6">
-            <Skeleton className="h-10 w-40 rounded-lg" />
-            <Skeleton className="h-10 w-40 rounded-lg" />
-            <Skeleton className="h-10 w-32 rounded-lg" />
-            <Skeleton className="h-10 w-56 rounded-lg" />
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-10 w-40 rounded-lg" />
+            ))}
           </div>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-              <div className="flex space-x-6 w-full">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Skeleton key={i} className="h-4 w-24" />
-                ))}
-              </div>
-            </div>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
               <div
                 key={i}
                 className="p-4 border-b border-gray-100 flex justify-between items-center"
               >
-                <div className="space-y-1">
-                  <Skeleton className="h-5 w-24" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-                <div className="space-y-1">
-                  <Skeleton className="h-5 w-40" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-                <div className="space-y-1">
-                  <Skeleton className="h-5 w-24" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-                <Skeleton className="h-5 w-12 text-blue-600" />
-                <Skeleton className="h-6 w-20 rounded-full" />
-                <div className="flex space-x-2">
-                  <Skeleton className="h-6 w-20" />
-                  <Skeleton className="h-6 w-16" />
-                </div>
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-6 w-16 rounded-full" />
               </div>
             ))}
           </div>
@@ -478,7 +534,7 @@ export default function page() {
         </div>
 
         {/* Quick Actions Bar */}
-        <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
           <Link href="/admin/student/add">
             <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
               + Add Student
@@ -490,8 +546,13 @@ export default function page() {
           >
             Upload CSV/Excel
           </button>
-          <button className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium">
-            Export Data
+          <button
+            onClick={handleExport}
+            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium"
+          >
+            {someSelected
+              ? `Export Selected (${selectedIds.size})`
+              : "Export Data"}
           </button>
           <select
             value={selectedDept}
@@ -510,9 +571,53 @@ export default function page() {
           </select>
         </div>
 
-        {/* Bulk Action Bar — shown when items are selected */}
+        {/* ── Search Bar ── */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {/* Field selector */}
+          <select
+            value={searchField}
+            onChange={(e) => setSearchField(e.target.value as any)}
+            className="px-3 py-2 border border-gray-300 bg-white text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 cursor-pointer"
+          >
+            {Object.entries(searchFieldLabels).map(([val, label]) => (
+              <option key={val} value={val}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          {/* Search input */}
+          <div className="relative flex-1 min-w-[220px]">
+            <HiMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search by ${searchFieldLabels[searchField].toLowerCase()}…`}
+              className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <HiXCircle className="text-lg" />
+              </button>
+            )}
+          </div>
+
+          {/* Result count badge */}
+          {searchQuery && (
+            <div className="flex items-center px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 font-medium">
+              {filteredStudents.length} result
+              {filteredStudents.length !== 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
+
+        {/* Bulk Action Bar */}
         {someSelected && (
-          <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-wrap items-center gap-3 animate-in slide-in-from-top-2 duration-200">
+          <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="h-6 w-6 bg-blue-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-xs font-bold">
@@ -545,42 +650,46 @@ export default function page() {
         )}
 
         {/* Students Table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          {filteredStudents.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          {pagedStudents.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-xl text-gray-500 mb-4">
-                No students found matching current filters
+              <div className="text-5xl mb-4">🔍</div>
+              <p className="text-xl text-gray-500 mb-2">No students found</p>
+              <p className="text-sm text-gray-400 mb-5">
+                {searchQuery
+                  ? `No results for "${searchQuery}" in ${searchFieldLabels[searchField]}`
+                  : "No students match the current filters"}
               </p>
-              <Link href="/admin/student/add">
-                <button className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                  Add Your First Student
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium"
+                >
+                  Clear Search
                 </button>
-              </Link>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    {/* Select All Checkbox */}
                     <th className="px-4 py-3 w-10">
-                      <div className="flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={allFilteredSelected}
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
-                          title={
-                            allFilteredSelected ? "Deselect all" : "Select all"
-                          }
-                        />
-                      </div>
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                        title={
+                          allPageSelected ? "Deselect page" : "Select page"
+                        }
+                      />
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Reg No &amp; Name
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Personal Details
+                      Contact
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Department / Batch
@@ -597,25 +706,20 @@ export default function page() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {filteredStudents.map((student) => {
+                  {pagedStudents.map((student) => {
                     const isChecked = selectedIds.has(student.id);
                     return (
                       <tr
                         key={student.id}
-                        className={`hover:bg-gray-50 transition-colors ${
-                          isChecked ? "bg-blue-50/60 hover:bg-blue-50" : ""
-                        }`}
+                        className={`transition-colors ${isChecked ? "bg-blue-50/60" : "hover:bg-gray-50/60"}`}
                       >
-                        {/* Row Checkbox */}
                         <td className="px-4 py-4 w-10">
-                          <div className="flex items-center justify-center">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleSelect(student.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
-                            />
-                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleSelect(student.id)}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                          />
                         </td>
 
                         <td className="px-4 py-4 whitespace-nowrap">
@@ -628,6 +732,11 @@ export default function page() {
                           {student.uniRegNumber && (
                             <div className="text-xs text-blue-600 font-mono mt-0.5 font-medium">
                               {student.uniRegNumber}
+                            </div>
+                          )}
+                          {student.rollNumber && (
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              Roll: {student.rollNumber}
                             </div>
                           )}
                         </td>
@@ -658,16 +767,19 @@ export default function page() {
 
                         <td className="px-4 py-4 whitespace-nowrap">
                           <span
-                            className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full border ${getStatusColor(
-                              student.status || "active",
-                            )}`}
+                            className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full border ${getStatusColor(student.status || "active")}`}
                           >
                             {(student.status || "active").toUpperCase()}
                           </span>
                         </td>
 
                         <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <Link href={`/admin/student/edit/${student.id}`}>
+                              <button className="text-xs font-medium px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1">
+                                <HiPencil className="text-sm" /> Edit
+                              </button>
+                            </Link>
                             <button
                               onClick={() =>
                                 toggleStatus(
@@ -675,10 +787,10 @@ export default function page() {
                                   student.status || "active",
                                 )
                               }
-                              className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors ${
+                              className={`text-xs font-medium px-2 py-1 rounded border transition-colors ${
                                 (student.status || "active") === "active"
-                                  ? "text-red-700 border-red-200 bg-red-50 hover:bg-red-100"
-                                  : "text-green-700 border-green-200 bg-green-50 hover:bg-green-100"
+                                  ? "text-red-600 border-red-100 hover:bg-red-50"
+                                  : "text-green-600 border-green-100 hover:bg-green-50"
                               }`}
                             >
                               {(student.status || "active") === "active"
@@ -687,9 +799,10 @@ export default function page() {
                             </button>
                             <button
                               onClick={() => handleDelete(student.id)}
-                              className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors flex items-center gap-1"
+                              className="p-1 rounded border border-red-100 text-red-500 hover:bg-red-50 transition-colors"
+                              title="Delete"
                             >
-                              <HiTrash className="text-sm" /> Delete
+                              <HiTrash className="text-sm" />
                             </button>
                           </div>
                         </td>
@@ -702,21 +815,85 @@ export default function page() {
           )}
         </div>
 
-        {/* Table Footer — count info */}
+        {/* ── Pagination ── */}
         {filteredStudents.length > 0 && (
-          <div className="mt-3 flex items-center justify-between text-sm text-gray-500 px-1">
-            <span>
-              Showing{" "}
-              <strong className="text-gray-700">
-                {filteredStudents.length}
-              </strong>{" "}
-              student{filteredStudents.length !== 1 ? "s" : ""}
-              {selectedDept ? ` in ${selectedDept}` : ""}
-            </span>
-            {someSelected && (
-              <span className="font-medium text-blue-600">
-                {selectedIds.size} selected
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            {/* Left: info + page size */}
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <span>
+                Showing{" "}
+                <strong className="text-gray-700">
+                  {(safePage - 1) * pageSize + 1}–
+                  {Math.min(safePage * pageSize, filteredStudents.length)}
+                </strong>{" "}
+                of{" "}
+                <strong className="text-gray-700">
+                  {filteredStudents.length}
+                </strong>
+                {selectedDept || searchQuery ? " (filtered)" : ""}
               </span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+              {someSelected && (
+                <span className="font-medium text-blue-600">
+                  {selectedIds.size} selected
+                </span>
+              )}
+            </div>
+
+            {/* Right: page buttons */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="px-2.5 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ‹ Prev
+                </button>
+
+                {getPageRange().map((page, i) =>
+                  page === "..." ? (
+                    <span
+                      key={`ellipsis-${i}`}
+                      className="px-2 text-gray-400 text-sm select-none"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page as number)}
+                      className={`min-w-[36px] px-2.5 py-1.5 text-sm rounded-lg border transition-colors ${
+                        safePage === page
+                          ? "bg-blue-600 text-white border-blue-600 font-semibold shadow-sm"
+                          : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ),
+                )}
+
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={safePage === totalPages}
+                  className="px-2.5 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next ›
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -747,7 +924,7 @@ export default function page() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className={`bg-white p-5 rounded-xl border border-gray-200 border-l-4 ${stat.color} shadow-sm`}
+              className={`bg-white p-4 rounded-lg border border-gray-200 border-l-4 ${stat.color}`}
             >
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                 {stat.label}
@@ -767,8 +944,7 @@ export default function page() {
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => !bulkDeleteLoading && setShowDeleteConfirm(false)}
           />
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Header */}
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-5 flex items-start gap-4">
               <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
                 <HiTrash className="text-white text-xl" />
@@ -782,7 +958,6 @@ export default function page() {
                 </p>
               </div>
             </div>
-            {/* Body */}
             <div className="px-6 py-5">
               <p className="text-gray-700 text-sm leading-relaxed">
                 You are about to permanently delete{" "}
@@ -798,7 +973,6 @@ export default function page() {
                 </p>
               </div>
             </div>
-            {/* Actions */}
             <div className="px-6 pb-6 flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
@@ -837,9 +1011,8 @@ export default function page() {
                   </>
                 ) : (
                   <>
-                    <HiTrash className="text-base" />
-                    Delete {selectedIds.size} Record
-                    {selectedIds.size > 1 ? "s" : ""}
+                    <HiTrash className="text-base" /> Delete {selectedIds.size}{" "}
+                    Record{selectedIds.size > 1 ? "s" : ""}
                   </>
                 )}
               </button>
@@ -1038,7 +1211,7 @@ export default function page() {
                     },
                     {
                       col: "Password",
-                      desc: "(Required) Min 6 chars — used to log in",
+                      desc: "(Required) Min 6 chars",
                       highlight: true,
                       opt: false,
                     },
