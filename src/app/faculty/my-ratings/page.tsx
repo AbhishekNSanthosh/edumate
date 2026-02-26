@@ -238,9 +238,9 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
         <div className="w-full">
-          <div className="mb-8">
+          <div className="mb-6 md:mb-8">
             <Skeleton className="h-10 w-64 mb-2" />
             <Skeleton className="h-5 w-96" />
           </div>
@@ -249,7 +249,7 @@ export default function page() {
             <Skeleton className="h-10 w-32" />
             <Skeleton className="h-10 w-32" />
           </div>
-          <div className="bg-white p-6 rounded-xl border border-gray-200 mb-8">
+          <div className="bg-white p-6 rounded-xl border border-gray-200 mb-6 md:mb-8">
             <Skeleton className="h-7 w-64 mb-4" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Skeleton className="h-20 w-full" />
@@ -257,7 +257,7 @@ export default function page() {
               <Skeleton className="h-20 w-full" />
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8">
             <div className="p-6 border-b border-gray-100">
               <Skeleton className="h-7 w-64" />
             </div>
@@ -272,12 +272,12 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-start">
+        <div className="mb-6 md:mb-8 flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">My Ratings</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">My Ratings</h1>
             <p className="text-gray-600 mt-2">
               Feedback received from students and performance overview.
             </p>
@@ -292,7 +292,7 @@ export default function page() {
 
         {/* Quick Actions */}
         <div className="flex flex-wrap gap-4 mb-6">
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setViewMode("recent")}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${viewMode === "recent" ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
@@ -328,7 +328,7 @@ export default function page() {
         </div>
 
         {/* Overall Summary */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
             Overall Performance Summary
           </h2>
@@ -364,7 +364,7 @@ export default function page() {
 
         {/* View Modes */}
         {viewMode === "recent" ? (
-          <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Recent Student Feedback
@@ -437,7 +437,7 @@ export default function page() {
             </div>
           </div>
         ) : viewMode === "course" ? (
-          <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Course-wise Ratings
@@ -506,7 +506,7 @@ export default function page() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Semester-wise Performance
@@ -568,7 +568,7 @@ export default function page() {
         )}
 
         {/* Rating Trends Chart */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">
             Rating Trends Over Semesters
           </h2>

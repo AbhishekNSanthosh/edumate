@@ -154,11 +154,11 @@ export default function page() {
   };
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
-        <div className="mb-8 flex justify-between items-end">
+        <div className="mb-6 md:mb-8 flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-light text-gray-900">
+            <h1 className="text-2xl md:text-3xl font-light text-gray-900">
               My Previous Details
             </h1>
             <p className="text-gray-500 mt-1 font-light">
@@ -168,7 +168,7 @@ export default function page() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 md:mb-8">
           <div className="bg-white p-6 rounded-xl border border-gray-200 flex items-center gap-4 hover:border-blue-300 transition-colors">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
               <IoBriefcaseOutline size={24} />
@@ -244,7 +244,7 @@ export default function page() {
         ) : (
           <>
             {/* 1. Previous Institutions */}
-            <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
               <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
                 <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
                   <IoBriefcaseOutline /> Previous Institutions
@@ -321,7 +321,7 @@ export default function page() {
             </div>
 
             {/* 2. Designations */}
-            <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
               <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
                 <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
                   <IoRibbonOutline /> Designation History
@@ -400,7 +400,7 @@ export default function page() {
             </div>
 
             {/* 3. Research */}
-            <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
               <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
                 <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
                   <IoSchoolOutline /> Research & Publications
@@ -485,7 +485,7 @@ export default function page() {
             </div>
 
             {/* 4. Appraisals (Read Only) */}
-            <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
               <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
                 <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
                   <IoStarOutline /> Performance Appraisals

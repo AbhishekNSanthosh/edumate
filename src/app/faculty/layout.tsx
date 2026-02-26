@@ -17,7 +17,7 @@ export default function Layout({
   return (
     <div className="w-screen h-screen flex flex-row overflow-x-hidden">
       <Sidebar />
-      <div className="flex flex-col w-[87vw] ml-[18vw]">
+      <div className="flex flex-col w-full md:w-[87vw] md:ml-[18vw]">
         <Topbar />
         <div className="bg-primary/5 h-full w-full pt-[11vh] overflow-auto">
           {children}

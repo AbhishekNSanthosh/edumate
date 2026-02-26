@@ -164,11 +164,11 @@ export default function FacultyDashboard() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-gray-900">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-light text-gray-900">
             Faculty Dashboard
           </h1>
           <p className="text-gray-500 font-light mt-1">

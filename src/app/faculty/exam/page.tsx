@@ -255,11 +255,11 @@ export default function page() {
   ).length;
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-gray-900">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-light text-gray-900">
             Exam Responsibilities
           </h1>
           <p className="text-gray-500 font-light mt-2">
@@ -271,7 +271,7 @@ export default function page() {
         <QuickActions />
 
         {/* Exam Timetable */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/30">
             <h2 className="text-lg font-medium text-gray-900">
               Exam Timetable
@@ -342,7 +342,7 @@ export default function page() {
         </div>
 
         {/* Invigilation Duties */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/30">
             <h2 className="text-lg font-medium text-gray-900">
               Invigilation Duties
@@ -425,7 +425,7 @@ export default function page() {
         </div>
 
         {/* Valuation Assignments */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/30">
             <h2 className="text-lg font-medium text-gray-900">
               Valuation Assignments

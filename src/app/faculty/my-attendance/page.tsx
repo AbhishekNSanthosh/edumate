@@ -254,8 +254,8 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
-        <div className="flex justify-between items-center mb-8">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
+        <div className="flex justify-between items-center mb-6 md:mb-8">
           <div className="space-y-2">
             <Skeleton className="h-10 w-64" />
             <Skeleton className="h-5 w-96" />
@@ -263,7 +263,7 @@ export default function page() {
           <Skeleton className="h-10 w-48" />
         </div>
 
-        <div className="mb-8 bg-white p-8 rounded-xl border border-gray-200 flex flex-col items-center">
+        <div className="mb-6 md:mb-8 bg-white p-8 rounded-xl border border-gray-200 flex flex-col items-center">
           <Skeleton className="h-6 w-96 mb-8" />
           <div className="flex gap-4">
             <Skeleton className="h-32 w-32 rounded-full" />
@@ -271,7 +271,7 @@ export default function page() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 md:mb-8">
           {[...Array(3)].map((_, i) => (
             <div
               key={i}
@@ -283,7 +283,7 @@ export default function page() {
           ))}
         </div>
 
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-6 md:mb-8">
           <div className="space-y-2">
             <Skeleton className="h-10 w-64" />
             <Skeleton className="h-5 w-96" />
@@ -291,7 +291,7 @@ export default function page() {
           <Skeleton className="h-10 w-48" />
         </div>
 
-        <div className="mb-8 bg-white p-8 rounded-xl border border-gray-100 flex flex-col items-center">
+        <div className="mb-6 md:mb-8 bg-white p-8 rounded-xl border border-gray-100 flex flex-col items-center">
           <Skeleton className="h-6 w-96 mb-8" />
           <div className="flex gap-4">
             <Skeleton className="h-32 w-32 rounded-full" />
@@ -299,7 +299,7 @@ export default function page() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 md:mb-8">
           {[...Array(3)].map((_, i) => (
             <div
               key={i}
@@ -325,11 +325,11 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-light text-gray-900">My Attendance</h1>
+            <h1 className="text-2xl md:text-3xl font-light text-gray-900">My Attendance</h1>
             <p className="text-gray-500 font-light mt-1">
               Manage daily check-ins and view monthly history.
             </p>
@@ -343,7 +343,7 @@ export default function page() {
         </div>
 
         {/* Today's Action Card */}
-        <div className="bg-white p-8 rounded-xl border border-gray-100 mb-8 flex flex-col items-center justify-center text-center">
+        <div className="bg-white p-8 rounded-xl border border-gray-100 mb-6 md:mb-8 flex flex-col items-center justify-center text-center">
           <h2 className="text-xl font-medium text-gray-900 mb-6">
             Today,{" "}
             <span className="font-semibold">
@@ -447,7 +447,7 @@ export default function page() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 md:mb-8">
           <div className="bg-white p-6 rounded-xl border border-gray-100 hover:border-green-300 transition-colors">
             <p className="text-gray-500 text-xs uppercase font-semibold">
               Present Days

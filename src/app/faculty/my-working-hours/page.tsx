@@ -134,8 +134,8 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
-        <div className="flex justify-between items-center mb-8">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
+        <div className="flex justify-between items-center mb-6 md:mb-8">
           <div className="space-y-2">
             <Skeleton className="h-10 w-64" />
             <Skeleton className="h-4 w-96" />
@@ -143,7 +143,7 @@ export default function page() {
           <Skeleton className="h-10 w-64" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 md:mb-8">
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
@@ -172,12 +172,12 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header & Month Selector */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-light text-gray-900">
+            <h1 className="text-2xl md:text-3xl font-light text-gray-900">
               My Working Hours
             </h1>
             <p className="text-gray-500 mt-1 font-light">
@@ -208,7 +208,7 @@ export default function page() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 md:mb-8">
           <div className="bg-white p-6 rounded-xl border border-gray-200 flex flex-col hover:border-blue-200 transition-colors">
             <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
               Teaching

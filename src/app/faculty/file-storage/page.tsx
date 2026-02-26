@@ -206,7 +206,7 @@ export default function page() {
   };
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full flex flex-col md:flex-row gap-6">
         {/* Sidebar */}
         <div className="w-full md:w-64 flex-shrink-0">

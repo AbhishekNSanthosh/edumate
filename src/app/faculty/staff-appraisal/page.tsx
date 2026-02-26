@@ -185,7 +185,7 @@ export default function page() {
   };
 
   const QuickActions = () => (
-    <div className="flex space-x-4 mb-6">
+    <div className="flex flex-wrap gap-3 mb-6">
       <button
         onClick={handleDownload}
         className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
@@ -223,11 +223,11 @@ export default function page() {
   ).length;
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-gray-900">Staff Appraisal</h1>
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-light text-gray-900">Staff Appraisal</h1>
           <p className="text-gray-500 font-light mt-2">
             Faculty performance evaluation and feedback.
           </p>
@@ -251,7 +251,7 @@ export default function page() {
         )}
 
         {!loading && !currentYearForm && appraisalForms.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500 font-light mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500 font-light mb-6 md:mb-8">
             No appraisal records found. <br /> Use the "Seed Appraisal Data"
             button to generate records.
           </div>
@@ -259,7 +259,7 @@ export default function page() {
 
         {/* Current Appraisal Form */}
         {!loading && currentYearForm && (
-          <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30 flex justify-between items-center">
               <h2 className="text-lg font-medium text-gray-900">
                 Current Appraisal Form ({currentYearForm.year})
@@ -286,7 +286,7 @@ export default function page() {
                       placeholder="Enter your detailed self-assessment..."
                     />
                   </div>
-                  <div className="flex space-x-4 justify-end">
+                  <div className="flex flex-wrap gap-3 justify-end">
                     <button
                       onClick={() => setEditingForm(null)}
                       className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
@@ -371,7 +371,7 @@ export default function page() {
 
         {/* History Table */}
         {!loading && historyForms.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Appraisal History

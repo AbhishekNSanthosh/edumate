@@ -172,9 +172,9 @@ export default function Topbar() {
   };
 
   return (
-    <div className="h-[11vh] fixed bg-white/80 backdrop-blur-md w-[82vw] flex flex-row items-center justify-between px-[2vw] shadow-sm z-30 border-b border-gray-100/50">
-      <div className="flex items-center gap-10">
-        <span className="font-bold text-xl bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+    <div className="h-[11vh] fixed bg-white/80 backdrop-blur-md w-full md:w-[82vw] flex flex-row items-center justify-between px-4 md:px-[2vw] z-30 border-b border-gray-100/50">
+      <div className="flex items-center gap-4 md:gap-10 ml-10 md:ml-0 flex-1 min-w-0">
+        <span className="font-bold text-base md:text-xl bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent hidden sm:inline">
           Welcome,{" "}
           {profile?.displayName ||
             profile?.name ||
@@ -184,9 +184,9 @@ export default function Topbar() {
         </span>
 
         {/* Search Bar */}
-        <div className="relative group" ref={searchRef}>
+        <div className="relative group flex-1 md:flex-none" ref={searchRef}>
           <div
-            className={`flex items-center bg-gray-50/80 hover:bg-white border text-gray-600 rounded-full px-5 py-2.5 w-[350px] transition-all duration-300 ease-in-out
+            className={`flex items-center bg-gray-50/80 hover:bg-white border text-gray-600 rounded-full px-3 md:px-5 py-2.5 w-full md:w-[350px] transition-all duration-300 ease-in-out
                 ${searchResults.length > 0 || searchQuery ? "bg-white shadow-lg ring-2 ring-blue-500/10 border-blue-100" : "border-transparent hover:shadow-md hover:border-gray-200"}
             `}
           >
@@ -239,7 +239,7 @@ export default function Topbar() {
         </div>
       </div>
 
-      <div className="flex flex-row gap-5 items-center">
+      <div className="flex flex-row gap-3 md:gap-5 items-center flex-shrink-0">
         {/* Notifications */}
         <div className="relative" ref={dropdownRef}>
           <button

@@ -162,7 +162,7 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
         <div className="w-full">
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <Skeleton className="h-48 w-full rounded-none" />
@@ -181,14 +181,14 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {/* Header / Cover */}
-          <div className="h-48 bg-gradient-to-r from-blue-500 to-purple-600"></div>
+          <div className="h-32 md:h-48 bg-gradient-to-r from-blue-500 to-purple-600"></div>
 
           <div className="px-6 pb-6">
-            <div className="flex justify-between items-end -mt-12 mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end -mt-12 mb-6 gap-3">
               <div className="relative">
                 <img
                   src={formData.photoUrl || "https://via.placeholder.com/150"}
@@ -205,7 +205,7 @@ export default function page() {
                 </button>
               )}
               {isEditing && (
-                <div className="flex space-x-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                   <label className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-sm cursor-pointer">
                     <FaCamera /> <span>Change Photo</span>
                     <input

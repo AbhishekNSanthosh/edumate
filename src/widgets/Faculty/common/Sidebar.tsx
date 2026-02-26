@@ -5,16 +5,17 @@ import { signOut } from "firebase/auth";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import React from "react";
-import { FiLogOut } from "react-icons/fi";
+import React, { useState, useEffect } from "react";
+import { FiLogOut, FiMenu, FiX } from "react-icons/fi";
 import { auth } from "../../../config/firebaseConfig";
 import toast from "react-hot-toast";
 
 export default function Sidebar() {
-  const userRole = "faculty"; 
+  const userRole = "faculty";
   const pathname = usePathname();
   const router = useRouter();
-  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Extract role from the URL path (e.g., /admin/dashboard -> "admin")
   const pathRole = pathname?.split("/")[1] || userRole;
@@ -23,6 +24,11 @@ export default function Sidebar() {
   const filteredMenu = facultySideBarMenu.filter((item) =>
     item.rightsToView.includes(userRole)
   );
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   const handleLogout = () => {
     setShowLogoutConfirm(true);
@@ -41,11 +47,10 @@ export default function Sidebar() {
     }
   };
 
-  return (
+  const sidebarContent = (
     <>
-    <div className="w-[17vw] h-screen shadow-sm flex flex-col bg-white fixed left-0 top-0 border-r border-gray-100 z-40">
       {/* Logo */}
-      <div className="py-6 px-[2vw] border-b border-gray-50 bg-gradient-to-r from-blue-50/50 to-transparent">
+      <div className="py-6 px-4 md:px-[2vw] border-b border-gray-50 bg-gradient-to-r from-blue-50/50 to-transparent flex items-center justify-between">
         <Image
           src="/brand/logo.svg"
           alt="logo"
@@ -54,6 +59,13 @@ export default function Sidebar() {
           className="h-8 w-auto"
           priority
         />
+        {/* Close button on mobile */}
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <FiX className="text-xl text-gray-600" />
+        </button>
       </div>
 
       {/* Menu Items */}
@@ -67,8 +79,8 @@ export default function Sidebar() {
               key={menu.link}
               href={menuPath}
               className={`flex items-center gap-3 h-12 px-4 relative rounded-xl transition-all duration-200 group
-                ${isActive 
-                    ? "bg-blue-50 text-blue-600 font-semibold shadow-sm shadow-blue-100" 
+                ${isActive
+                    ? "bg-blue-50 text-blue-600 font-semibold shadow-sm shadow-blue-100"
                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 }
               `}
@@ -102,7 +114,38 @@ export default function Sidebar() {
           Logout
         </button>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile Hamburger Button */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="md:hidden fixed top-3 left-3 z-50 p-2 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+      >
+        <FiMenu className="text-xl text-gray-700" />
+      </button>
+
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex w-[17vw] h-screen flex-col bg-white fixed left-0 top-0 border-r border-gray-100 z-40">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-[90]">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Sidebar Drawer */}
+          <div className="absolute left-0 top-0 h-full w-[75vw] max-w-[300px] bg-white flex flex-col animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
 
       {/* Custom Logout Confirmation Modal */}
       {showLogoutConfirm && (

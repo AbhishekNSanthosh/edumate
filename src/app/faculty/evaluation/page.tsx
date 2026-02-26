@@ -300,18 +300,18 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
-        <div className="mb-8">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
+        <div className="mb-6 md:mb-8">
           <Skeleton className="h-10 w-64 mb-2" />
           <Skeleton className="h-5 w-96" />
         </div>
-        <div className="flex gap-4 mb-8 border-b border-gray-200 pb-2">
+        <div className="flex gap-4 mb-6 md:mb-8 border-b border-gray-200 pb-2">
           <Skeleton className="h-10 w-32" />
           <Skeleton className="h-10 w-32" />
           <Skeleton className="h-10 w-32" />
           <Skeleton className="h-10 w-32" />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/30">
             <Skeleton className="h-7 w-48" />
           </div>
@@ -339,11 +339,11 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-gray-900">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-light text-gray-900">
             Evaluation Management
           </h1>
           <p className="text-gray-500 mt-2 font-light">
@@ -356,7 +356,7 @@ export default function page() {
 
         {/* Content based on tab */}
         {selectedTab === "assignments" ? (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6 md:mb-8">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Assignment Evaluation
@@ -456,7 +456,7 @@ export default function page() {
             </div>
           </div>
         ) : selectedTab === "internal" ? (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6 md:mb-8">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Internal Marks Entry
@@ -541,7 +541,7 @@ export default function page() {
             </div>
           </div>
         ) : selectedTab === "exams" ? (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6 md:mb-8">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Exam Valuation Status
@@ -602,7 +602,7 @@ export default function page() {
             </div>
           </div>
         ) : selectedTab === "reports" ? (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6 md:mb-8">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Student Performance Reports
@@ -675,7 +675,7 @@ export default function page() {
             </div>
           </div>
         ) : selectedTab === "grades" ? (
-          <div className="bg-white rounded-xl border border-gray-200 mb-8 p-6">
+          <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 p-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4">
               Grade Submission Controls
             </h2>
@@ -687,7 +687,7 @@ export default function page() {
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6 md:mb-8">
             <div className="p-6 border-b border-gray-100 bg-gray-50/30">
               <h2 className="text-lg font-medium text-gray-900">
                 Evaluation Deadlines

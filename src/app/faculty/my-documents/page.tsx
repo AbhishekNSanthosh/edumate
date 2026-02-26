@@ -184,13 +184,13 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
-        <div className="mb-8">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
+        <div className="mb-6 md:mb-8">
           <Skeleton className="h-10 w-64 mb-2" />
           <Skeleton className="h-5 w-96" />
         </div>
 
-        <div className="mb-8 bg-white p-6 rounded-xl border border-gray-200">
+        <div className="mb-6 md:mb-8 bg-white p-6 rounded-xl border border-gray-200">
           <Skeleton className="h-6 w-48 mb-4" />
           <div className="flex gap-4">
             <Skeleton className="h-10 w-full" />
@@ -198,7 +198,7 @@ export default function page() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 md:mb-8">
           {[...Array(3)].map((_, i) => (
             <div
               key={i}
@@ -224,18 +224,18 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-gray-900">My Documents</h1>
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-light text-gray-900">My Documents</h1>
           <p className="text-gray-500 font-light mt-1">
             Securely manage your employment and academic records.
           </p>
         </div>
 
         {/* Upload Section */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 mb-8">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 mb-6 md:mb-8">
           <h2 className="text-lg font-medium text-gray-900 mb-4">
             Upload New Document
           </h2>
@@ -289,7 +289,7 @@ export default function page() {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 md:mb-8">
           <div className="bg-white p-6 rounded-xl border border-gray-200 hover:border-blue-300 transition-colors">
             <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wide">
               Total Uploads

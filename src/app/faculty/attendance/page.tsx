@@ -150,12 +150,12 @@ export default function StudentAttendancePage() {
   const periods = [1, 2, 3, 4, 5, 6, 7];
 
   return (
-    <div className="mt-[100px] p-6 bg-gray-50 min-h-screen">
+    <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Mark Student Attendance</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6 md:mb-8">Mark Student Attendance</h1>
 
         {/* Controls */}
-        <div className="bg-white p-6 rounded-lg shadow-sm mb-6 flex flex-wrap gap-6 items-end">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 items-end">
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Select Batch</label>
                 <select 
@@ -223,6 +223,7 @@ export default function StudentAttendancePage() {
                         <h3 className="font-semibold text-gray-700">Student List</h3>
                         <span className="text-sm text-gray-500">Total Students: {students.length}</span>
                     </div>
+                    <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
@@ -292,7 +293,8 @@ export default function StudentAttendancePage() {
                             ))}
                         </tbody>
                     </table>
-                    <div className="p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
+                    </div>
+                    <div className="p-4 md:p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
                         <button 
                             onClick={handleSubmit}
                             disabled={loading || !selectedPeriod}

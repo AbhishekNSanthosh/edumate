@@ -193,7 +193,7 @@ export default function page() {
   };
 
   const QuickActions = () => (
-    <div className="flex space-x-4 mb-6">
+    <div className="flex flex-wrap gap-3 mb-6">
       <button
         onClick={handleUpdatePickup}
         className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
@@ -214,17 +214,17 @@ export default function page() {
 
   if (loading)
     return (
-      <div className="w-full p-6 bg-gray-50 min-h-screen">
-        <div className="mb-8">
+      <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
+        <div className="mb-6 md:mb-8">
           <Skeleton className="h-10 w-64 mb-2" />
           <Skeleton className="h-5 w-96" />
         </div>
-        <div className="flex gap-4 mb-8">
+        <div className="flex gap-4 mb-6 md:mb-8">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-10 w-32" />
           <Skeleton className="h-10 w-48" />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/30">
             <Skeleton className="h-7 w-48" />
           </div>
@@ -243,11 +243,11 @@ export default function page() {
     );
 
   return (
-    <div className="w-full p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-gray-900">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-light text-gray-900">
             Faculty Transport Management
           </h1>
           <p className="text-gray-500 font-light mt-2">
@@ -259,7 +259,7 @@ export default function page() {
         <QuickActions />
 
         {/* Assigned Route & Points */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4 border-b border-gray-100 pb-2">
             Assigned Bus Route
           </h2>
@@ -311,7 +311,7 @@ export default function page() {
         </div>
 
         {/* Transport Schedule */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/30">
             <h2 className="text-lg font-medium text-gray-900">
               Transport Schedule
@@ -366,7 +366,7 @@ export default function page() {
         </div>
 
         {/* Transport Fee Details */}
-        <div className="bg-white rounded-xl border border-gray-200 mb-8 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 md:mb-8 p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4 border-b border-gray-100 pb-2">
             Transport Fee Details
           </h2>
