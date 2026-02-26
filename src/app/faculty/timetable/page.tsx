@@ -12,6 +12,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
 import MarkAttendanceModal from "../../../widgets/Faculty/MarkAttendanceModal";
@@ -148,8 +149,7 @@ export default function TimetablePage() {
       setSwapRequests((prev) => {
         const received = prev.filter((r) => r.fromFacultyId !== user.uid);
         return [...received, ...sent].sort(
-          (a, b) =>
-            (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0),
+          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0),
         );
       });
     });
@@ -161,8 +161,7 @@ export default function TimetablePage() {
       setSwapRequests((prev) => {
         const sent = prev.filter((r) => r.toFacultyId !== user.uid);
         return [...sent, ...received].sort(
-          (a, b) =>
-            (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0),
+          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0),
         );
       });
     });
@@ -276,6 +275,7 @@ export default function TimetablePage() {
 
     setSwapLoading(true);
     try {
+      // 1. Create swap request in Firestore
       await addDoc(collection(db, "swap_requests"), {
         fromFacultyId: user.uid,
         fromFacultyName: user.displayName || "Faculty",
@@ -288,6 +288,51 @@ export default function TimetablePage() {
         status: "pending",
         createdAt: serverTimestamp(),
       });
+
+      // 2. Write swap notification for target faculty
+      await addDoc(collection(db, "swap_notifications"), {
+        type: "request",
+        toFacultyId: selectedFacultyId,
+        fromFacultyId: user.uid,
+        fromFacultyName: user.displayName || "Faculty",
+        subjectName: swapSlot.subject,
+        day: currentDayName,
+        date: selectedDate,
+        time: swapSlot.time,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+
+      // 3. Fetch target faculty email and send email notification
+      try {
+        const targetProfileSnap = await getDoc(
+          doc(db, "faculty_profiles", selectedFacultyId),
+        );
+        const targetEmail =
+          targetProfileSnap.data()?.email ||
+          targetProfileSnap.data()?.contactEmail;
+        if (targetEmail) {
+          await fetch("/api/swap-notification", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              toEmail: targetEmail,
+              toName: targetFaculty.name,
+              fromName: user.displayName || "Faculty",
+              type: "request",
+              subjectName: swapSlot.subject,
+              day: currentDayName,
+              date: selectedDate,
+              time: swapSlot.time,
+              batch: swapSlot.batch,
+              room: swapSlot.room,
+              reason: swapReason.trim(),
+            }),
+          });
+        }
+      } catch (emailErr) {
+        console.warn("Email notification skipped:", emailErr);
+      }
 
       toast.success(`Swap request sent to ${targetFaculty.name}`);
       setIsSwapModalOpen(false);
@@ -307,9 +352,60 @@ export default function TimetablePage() {
     response: "accepted" | "declined",
   ) => {
     try {
+      // 1. Update swap request status
       await updateDoc(doc(db, "swap_requests", requestId), {
         status: response,
       });
+
+      // 2. Find the swap request to get original sender info
+      const req = swapRequests.find((r) => r.id === requestId);
+      if (req && user) {
+        // 3. Write notification for the sender (fromFaculty)
+        await addDoc(collection(db, "swap_notifications"), {
+          type: response, // "accepted" or "declined"
+          toFacultyId: req.fromFacultyId,
+          fromFacultyId: user.uid,
+          fromFacultyName: user.displayName || req.toFacultyName,
+          subjectName: req.slot.subject,
+          day: req.day,
+          date: req.date,
+          time: req.slot.time,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+
+        // 4. Send email to the original requester
+        try {
+          const senderProfileSnap = await getDoc(
+            doc(db, "faculty_profiles", req.fromFacultyId),
+          );
+          const senderEmail =
+            senderProfileSnap.data()?.email ||
+            senderProfileSnap.data()?.contactEmail;
+          if (senderEmail) {
+            await fetch("/api/swap-notification", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                toEmail: senderEmail,
+                toName: req.fromFacultyName,
+                fromName: user.displayName || req.toFacultyName,
+                type: response,
+                subjectName: req.slot.subject,
+                day: req.day,
+                date: req.date,
+                time: req.slot.time,
+                batch: req.slot.batch,
+                room: req.slot.room,
+                reason: req.reason,
+              }),
+            });
+          }
+        } catch (emailErr) {
+          console.warn("Email notification skipped:", emailErr);
+        }
+      }
+
       toast.success(
         `Swap request ${response === "accepted" ? "accepted" : "declined"}`,
       );
@@ -603,9 +699,7 @@ export default function TimetablePage() {
                           <td className="px-4 md:px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex flex-wrap gap-2">
                               <button
-                                onClick={() =>
-                                  handleMarkAttendanceClick(slot)
-                                }
+                                onClick={() => handleMarkAttendanceClick(slot)}
                                 disabled={!canMarkAttendance}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border
                                   ${
@@ -615,9 +709,7 @@ export default function TimetablePage() {
                                   }
                                 `}
                               >
-                                {canMarkAttendance
-                                  ? "Mark Attendance"
-                                  : "N/A"}
+                                {canMarkAttendance ? "Mark Attendance" : "N/A"}
                               </button>
                               <button
                                 onClick={() => handleSwapClick(slot)}
@@ -640,9 +732,7 @@ export default function TimetablePage() {
                 <h3 className="text-lg font-medium text-gray-900">
                   No classes scheduled
                 </h3>
-                <p className="text-gray-500 font-light">
-                  Enjoy your free day!
-                </p>
+                <p className="text-gray-500 font-light">Enjoy your free day!</p>
               </div>
             )
           ) : (
@@ -763,7 +853,9 @@ export default function TimetablePage() {
               </button>
               <button
                 onClick={handleSwapSubmit}
-                disabled={swapLoading || !selectedFacultyId || !swapReason.trim()}
+                disabled={
+                  swapLoading || !selectedFacultyId || !swapReason.trim()
+                }
                 className="flex-1 px-4 py-2.5 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {swapLoading ? (
