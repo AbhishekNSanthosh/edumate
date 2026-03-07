@@ -38,30 +38,47 @@ export default function Dashboard() {
       try {
         setLoading(true);
 
-        // 1. Fetch Notifications (Announcements) and Filter Client-Side
-        const notifQuery = query(
+        // 1. Fetch Notifications (role-wide + personalized)
+        const roleQuery = query(
           collection(db, "notifications"),
+          where("audience", "array-contains", "student"),
           orderBy("createdAt", "desc"),
           limit(20),
-        ); // Fetch more to filter locally
-        const notifSnap = await getDocs(notifQuery);
+        );
+        const personalQuery = query(
+          collection(db, "notifications"),
+          where("targetUid", "==", user.uid),
+          orderBy("createdAt", "desc"),
+          limit(10),
+        );
 
-        const filteredNotifs = notifSnap.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as any)
-          .filter((n) => {
-            // If audience is defined, must include 'student' or 'all'
+        const [roleSnap, personalSnap] = await Promise.all([
+          getDocs(roleQuery),
+          getDocs(personalQuery),
+        ]);
+
+        // Merge and deduplicate
+        const map = new Map<string, any>();
+        [...roleSnap.docs, ...personalSnap.docs].forEach((d) =>
+          map.set(d.id, { id: d.id, ...d.data() }),
+        );
+        const filteredNotifs = Array.from(map.values())
+          .filter((n: any) => {
+            if (n.targetUid && n.targetUid !== user.uid) return false;
             if (n.audience) {
-              return (
-                n.audience.includes("student") || n.audience.includes("all")
-              );
+              return n.audience.includes("student") || n.audience.includes("all");
             }
-            // Legacy/Fallback: Exclude known admin/faculty-only titles if no audience tag
+            if (n.targetUid === user.uid) return true;
             const adminTitles = ["New Student Added", "New Faculty Added"];
             if (adminTitles.includes(n.title)) return false;
-
-            return true; // Default to showing if unsure (or change to false for strict mode)
+            return true;
           })
-          .slice(0, 3); // Take top 3 after filtering
+          .sort((a: any, b: any) => {
+            const tA = a.createdAt?.seconds || new Date(a.createdAt || 0).getTime() / 1000;
+            const tB = b.createdAt?.seconds || new Date(b.createdAt || 0).getTime() / 1000;
+            return tB - tA;
+          })
+          .slice(0, 5);
 
         setNotifications(filteredNotifs);
 

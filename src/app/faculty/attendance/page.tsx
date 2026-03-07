@@ -1,8 +1,133 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, getDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../config/firebaseConfig';
 import toast from 'react-hot-toast';
+
+interface AttendanceAlert {
+  studentName: string;
+  studentEmail: string;
+  studentPhone?: string;
+  subjectName: string;
+  percentage: number;
+  threshold: number;
+  canSkip: number;
+  type: "warning" | "info";
+}
+
+// ── Attendance threshold alert system ──
+const ATTENDANCE_THRESHOLDS = [
+  { percent: 75, type: "warning" as const, message: (name: string, subj: string, pct: number, canSkip: number) =>
+    `${name}, your attendance in ${subj} is now ${pct}%. You can only skip ${canSkip} more class${canSkip !== 1 ? "es" : ""} before falling below 75%.` },
+  { percent: 80, type: "info" as const, message: (name: string, subj: string, pct: number) =>
+    `${name}, your attendance in ${subj} has reached ${pct}%. Keep it up!` },
+  { percent: 90, type: "info" as const, message: (name: string, subj: string, pct: number) =>
+    `${name}, excellent! Your attendance in ${subj} is now ${pct}%.` },
+];
+
+async function checkAttendanceThresholds(
+  studentId: string,
+  studentName: string,
+  subjectId: string,
+  subjectName: string,
+): Promise<AttendanceAlert[]> {
+  const alerts: AttendanceAlert[] = [];
+  try {
+    // Fetch all attendance records for this student + subject
+    const q = query(
+      collection(db, "attendance"),
+      where("studentId", "==", studentId),
+      where("subjectId", "==", subjectId),
+    );
+    const snap = await getDocs(q);
+    const records = snap.docs.map((d) => d.data());
+
+    const total = records.length;
+    if (total === 0) return alerts;
+
+    const attended = records.filter((r) => r.status === "present").length;
+    const percentage = Math.round((attended / total) * 100);
+
+    // Calculate how many more classes can be skipped while maintaining 75%
+    const canSkip = Math.max(0, Math.floor((attended - 0.75 * total) / 0.75));
+
+    // Fetch student email and phone for email/SMS alerts
+    let studentEmail = "";
+    let studentPhone = "";
+    try {
+      const studentDoc = await getDoc(doc(db, "students", studentId));
+      if (studentDoc.exists()) {
+        const data = studentDoc.data();
+        studentEmail = data.email || "";
+        studentPhone = data.phone || data.mobile || "";
+      }
+    } catch { /* ignore - email/SMS just won't send */ }
+
+    // Check which thresholds are crossed
+    for (const threshold of ATTENDANCE_THRESHOLDS) {
+      const shouldNotify =
+        (threshold.percent === 75 && percentage >= 75 && percentage <= 78) ||
+        (threshold.percent !== 75 && percentage >= threshold.percent && percentage <= threshold.percent + 3);
+
+      if (!shouldNotify) continue;
+
+      // Check if we already sent this notification recently (within last 7 days)
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const existingQ = query(
+        collection(db, "notifications"),
+        where("targetUid", "==", studentId),
+        where("thresholdKey", "==", `${subjectId}_${threshold.percent}`),
+      );
+      const existing = await getDocs(existingQ);
+      const recentExists = existing.docs.some((d) => {
+        const created = d.data().createdAt;
+        if (!created) return false;
+        const createdDate = typeof created === "string" ? new Date(created) : created.toDate?.() || new Date(0);
+        return createdDate > weekAgo;
+      });
+
+      if (recentExists) continue;
+
+      // Create in-app notification (Firestore)
+      const title =
+        threshold.percent === 75
+          ? `Attendance Warning - ${subjectName}`
+          : `Attendance Milestone - ${subjectName}`;
+
+      const message =
+        threshold.percent === 75
+          ? threshold.message(studentName, subjectName, percentage, canSkip)
+          : threshold.message(studentName, subjectName, percentage, 0);
+
+      await addDoc(collection(db, "notifications"), {
+        title,
+        message,
+        createdAt: new Date().toISOString(),
+        read: false,
+        type: threshold.type,
+        audience: ["student"],
+        targetUid: studentId,
+        thresholdKey: `${subjectId}_${threshold.percent}`,
+      });
+
+      // Collect alert for email/SMS
+      alerts.push({
+        studentName,
+        studentEmail,
+        studentPhone,
+        subjectName,
+        percentage,
+        threshold: threshold.percent,
+        canSkip,
+        type: threshold.type,
+      });
+    }
+  } catch (err) {
+    console.error("Attendance threshold check failed:", err);
+  }
+  return alerts;
+}
 
 export default function StudentAttendancePage() {
   const [batches, setBatches] = useState<any[]>([]);
@@ -138,6 +263,35 @@ export default function StudentAttendancePage() {
 
         await Promise.all(promises);
         toast.success(`Attendance marked for Period ${selectedPeriod}!`);
+
+        // Check attendance thresholds and send notifications (background)
+        (async () => {
+          try {
+            const thresholdResults = await Promise.all(
+              students.map((student) =>
+                checkAttendanceThresholds(
+                  student.id,
+                  student.name,
+                  selectedSubject,
+                  subject?.name || "Unknown Subject",
+                )
+              )
+            );
+
+            // Collect all alerts from all students
+            const allAlerts = thresholdResults.flat();
+            if (allAlerts.length === 0) return;
+
+            // Send email + SMS via API route
+            fetch("/api/attendance-alerts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ alerts: allAlerts }),
+            }).catch((err) => console.error("Alert API error:", err));
+          } catch (err) {
+            console.error("Threshold check error:", err);
+          }
+        })();
         
     } catch (error) {
         console.error("Error saving attendance:", error);

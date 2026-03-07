@@ -10,6 +10,8 @@ import {
   FaUser,
   FaLock,
   FaMicrophone,
+  FaVolumeUp,
+  FaVolumeMute,
 } from "react-icons/fa";
 import { auth, db } from "../../config/firebaseConfig";
 import {
@@ -43,6 +45,7 @@ interface ResolvedUser {
   role: Role;
   // role-specific extras
   batchId?: string; // student's batch
+  regNumber?: string; // student's registration number
   childUid?: string; // parent's child UID
   childName?: string;
   facultySubjects?: string[]; // faculty's subject IDs
@@ -161,6 +164,14 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "teachers",
   ],
   departments: ["department", "departments", "dept stats", "department info"],
+  internals: [
+    "internal", "internals", "internal mark", "internal marks",
+    "clearing internals", "pass internals", "internal calculation",
+    "how much mark", "marks needed", "series exam", "series mark",
+    "first series", "second series", "internal assessment",
+    // Malayalam / Manglish
+    "ഇന്റേണൽ", "internal mark entha", "internal kittan", "series mark",
+  ],
   evaluation: ["evaluation", "appraisal", "rating", "faculty rating"],
   student_leaves: [
     "student leave",
@@ -250,6 +261,7 @@ const ROLE_ALLOWED_INTENTS: Record<Role, string[]> = {
     "timetable",
     "leaves",
     "results",
+    "internals",
     "notifications",
     "profile",
   ],
@@ -284,6 +296,7 @@ const ROLE_ALLOWED_INTENTS: Record<Role, string[]> = {
     "assignments",
     "timetable",
     "results",
+    "internals",
     "notifications",
     "profile",
   ],
@@ -552,13 +565,27 @@ async function fetchForIntent(
 
     // ── NOTIFICATIONS ──────────────────────────
     case "notifications": {
-      const q = query(
+      // Role-wide notifications
+      const roleQ = query(
         col(db, "notifications"),
-        where("targetRole", "in", [user.role, "all"]),
+        where("audience", "array-contains", user.role),
         limit(10),
       );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Personalized notifications for this user
+      const personalQ = query(
+        col(db, "notifications"),
+        where("targetUid", "==", user.uid),
+        limit(10),
+      );
+      const [roleSnap, personalSnap] = await Promise.all([
+        getDocs(roleQ),
+        getDocs(personalQ),
+      ]);
+      const map = new Map<string, any>();
+      [...roleSnap.docs, ...personalSnap.docs].forEach((d) =>
+        map.set(d.id, { id: d.id, ...d.data() }),
+      );
+      return Array.from(map.values()).slice(0, 15);
     }
 
     // ── PROFILE ────────────────────────────────
@@ -722,6 +749,38 @@ async function fetchForIntent(
       return null;
     }
 
+    // ── INTERNALS (combined: attendance + assignments + series marks) ──
+    case "internals": {
+      const targetUid =
+        user.role === "parent" && user.childUid ? user.childUid : user.uid;
+
+      if (user.role === "student" || user.role === "parent") {
+        // Fetch attendance
+        const attSnap = await getDocs(
+          query(col(db, "attendance"), where("studentId", "==", targetUid)),
+        );
+        const attendance = attSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        // Fetch assignments
+        const asgSnap = await getDocs(
+          query(col(db, "assignments"), where("studentId", "==", targetUid)),
+        );
+        const assignments = asgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        // Fetch series/internal marks
+        const intSnap = await getDocs(
+          query(
+            col(db, "evaluation_internals"),
+            where("regNumber", "==", user.regNumber || ""),
+          ),
+        );
+        const seriesMarks = intSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        return { attendance, assignments, seriesMarks };
+      }
+      return null;
+    }
+
     default:
       return null;
   }
@@ -777,6 +836,7 @@ async function resolveUser(
         email,
         role: "student",
         batchId: data.batchId,
+        regNumber: data.regNumber || data.rollNumber || "",
       };
     }
 
@@ -908,11 +968,161 @@ export default function EduBot() {
   // Atomic message ID counter — avoids duplicate keys when two messages are
   // created within the same millisecond
   const msgIdRef = useRef(0);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
   const updateMicState = (s: MicState) => {
     micStateRef.current = s;
     setMicState(s);
   };
+
+  // ── Text-to-Speech ──
+  const stopAllSpeech = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    if ((window as any).__edubotCancelTTS) {
+      (window as any).__edubotCancelTTS();
+      (window as any).__edubotCancelTTS = null;
+    }
+    setSpeakingMsgId(null);
+  }, []);
+
+  const speakText = useCallback((text: string, msgId: string) => {
+    // If already speaking this message, stop it
+    if (speakingMsgId === msgId) {
+      stopAllSpeech();
+      return;
+    }
+
+    // Stop any ongoing speech
+    stopAllSpeech();
+
+    // Strip markdown formatting for cleaner speech
+    const cleanText = text
+      .replace(/#{1,6}\s?/g, "")                    // headers
+      .replace(/\*\*(.+?)\*\*/g, "$1")              // bold
+      .replace(/\*(.+?)\*/g, "$1")                  // italic
+      .replace(/`(.+?)`/g, "$1")                    // inline code
+      .replace(/^\|.*\|$/gm, (row) =>               // table rows → readable
+        row.replace(/\|/g, " ").replace(/-{2,}/g, "").trim()
+      )
+      .replace(/\|/g, " ")                          // leftover pipes
+      .replace(/-{3,}/g, "")                         // horizontal rules
+      .replace(/[📊✅❌📅🤔📋🎓📝😊🔔📌]/g, "")   // emojis
+      .replace(/\n{2,}/g, ". ")                      // multiple newlines
+      .replace(/\n/g, ". ")                          // single newlines
+      .replace(/\s{2,}/g, " ")                       // extra spaces
+      .trim();
+
+    // Detect Malayalam content
+    const hasMalayalam = /[\u0D00-\u0D7F]/.test(cleanText);
+
+    if (hasMalayalam) {
+      // Use Google Translate TTS for reliable Malayalam audio
+      // Split into chunks of ~200 chars (Google TTS limit)
+      const chunks: string[] = [];
+      let remaining = cleanText;
+      while (remaining.length > 0) {
+        if (remaining.length <= 200) {
+          chunks.push(remaining);
+          break;
+        }
+        // Find a natural break point (sentence end or comma)
+        let breakIdx = remaining.lastIndexOf(".", 200);
+        if (breakIdx < 50) breakIdx = remaining.lastIndexOf(",", 200);
+        if (breakIdx < 50) breakIdx = remaining.lastIndexOf(" ", 200);
+        if (breakIdx < 50) breakIdx = 200;
+        chunks.push(remaining.slice(0, breakIdx + 1));
+        remaining = remaining.slice(breakIdx + 1).trim();
+      }
+
+      setSpeakingMsgId(msgId);
+      let cancelled = false;
+
+      const playChunks = async () => {
+        for (const chunk of chunks) {
+          if (cancelled) break;
+          const encoded = encodeURIComponent(chunk.trim());
+          if (!encoded) continue;
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=ml&client=tw-ob`;
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const audio = new Audio(url);
+              audio.playbackRate = 0.9;
+              audio.onended = () => resolve();
+              audio.onerror = () => reject(new Error("TTS audio failed"));
+              audio.play().catch(reject);
+              // Store reference so we can cancel
+              const checkCancel = setInterval(() => {
+                if (cancelled) {
+                  audio.pause();
+                  clearInterval(checkCancel);
+                  resolve();
+                }
+              }, 100);
+              audio.onended = () => {
+                clearInterval(checkCancel);
+                resolve();
+              };
+            });
+          } catch {
+            // If Google TTS fails, fall back to browser speech synthesis
+            await new Promise<void>((resolve) => {
+              const utter = new SpeechSynthesisUtterance(chunk);
+              utter.lang = "ml-IN";
+              const voices = window.speechSynthesis.getVoices();
+              const mlVoice = voices.find((v) => v.lang === "ml-IN") ||
+                voices.find((v) => v.lang.startsWith("ml"));
+              if (mlVoice) utter.voice = mlVoice;
+              utter.rate = 0.85;
+              utter.onend = () => resolve();
+              utter.onerror = () => resolve();
+              window.speechSynthesis.speak(utter);
+            });
+          }
+        }
+        if (!cancelled) setSpeakingMsgId(null);
+      };
+
+      // Store cancel function so clicking stop works
+      (window as any).__edubotCancelTTS = () => {
+        cancelled = true;
+        setSpeakingMsgId(null);
+      };
+
+      playChunks();
+    } else {
+      // English: use browser SpeechSynthesis
+      const voices = window.speechSynthesis.getVoices();
+      const enVoice = voices.find((v) => v.lang === "en-IN") ||
+        voices.find((v) => v.lang.startsWith("en"));
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = "en-IN";
+      if (enVoice) utterance.voice = enVoice;
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+
+      utterance.onstart = () => setSpeakingMsgId(msgId);
+      utterance.onend = () => setSpeakingMsgId(null);
+      utterance.onerror = () => setSpeakingMsgId(null);
+
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [speakingMsgId, stopAllSpeech]);
+
+  // Preload voices (Chrome loads them asynchronously)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  }, []);
+
+  // Stop speech when chat is closed
+  useEffect(() => {
+    if (!isOpen) stopAllSpeech();
+  }, [isOpen, stopAllSpeech]);
 
   // ── Auth listener ─────────────────────────
   useEffect(() => {
@@ -1408,14 +1618,35 @@ export default function EduBot() {
                   ) : (
                     <p className="text-sm leading-relaxed">{msg.text}</p>
                   )}
-                  <p
-                    className={`text-[10px] mt-1 ${msg.sender === "user" ? "text-white/60 text-right" : "text-gray-400"}`}
+                  <div
+                    className={`flex items-center gap-1.5 mt-1 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    {msg.timestamp.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+                    <span
+                      className={`text-[10px] ${msg.sender === "user" ? "text-white/60" : "text-gray-400"}`}
+                    >
+                      {msg.timestamp.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    {msg.sender === "bot" && msg.id !== "welcome" && (
+                      <button
+                        onClick={() => speakText(msg.text, msg.id)}
+                        className={`p-0.5 rounded-full transition-colors ${
+                          speakingMsgId === msg.id
+                            ? "text-violet-600 hover:text-violet-700"
+                            : "text-gray-400 hover:text-gray-600"
+                        }`}
+                        title={speakingMsgId === msg.id ? "Stop speaking" : "Read aloud"}
+                      >
+                        {speakingMsgId === msg.id ? (
+                          <FaVolumeMute size={11} />
+                        ) : (
+                          <FaVolumeUp size={11} />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

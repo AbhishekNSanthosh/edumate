@@ -51,33 +51,93 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
     return () => unsub();
   }, [user]);
 
-  // 2. Fetch Notifications (Student specific)
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // 2. Fetch Notifications (role-wide + personalized)
   useEffect(() => {
     if (!user) return;
 
-    // Query for notifications where audience array contains 'student'
-    // Removing orderBy to avoid index creation requirement error. Sorting client-side instead.
-    const q = query(
+    let roleNotifs: any[] = [];
+    let personalNotifs: any[] = [];
+    let prevPersonalIds = new Set<string>();
+    let isFirstLoad = true;
+
+    const mergeAndSet = () => {
+      // Deduplicate by id, merge both sources
+      const map = new Map<string, any>();
+      [...roleNotifs, ...personalNotifs].forEach((n) => map.set(n.id, n));
+      const merged = Array.from(map.values());
+
+      // Client-side sort by createdAt descending
+      merged.sort((a: any, b: any) => {
+        const tA = a.createdAt?.seconds || new Date(a.createdAt || 0).getTime() / 1000;
+        const tB = b.createdAt?.seconds || new Date(b.createdAt || 0).getTime() / 1000;
+        return tB - tA;
+      });
+
+      setNotifications(merged.slice(0, 20));
+      setUnreadCount(merged.filter((n: any) => !n.read).length);
+    };
+
+    // Show browser notification for new personal alerts
+    const showBrowserNotification = (notif: any) => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") return;
+
+      const icon = notif.type === "warning" ? "/warning-icon.png" : "/info-icon.png";
+      const n = new Notification(notif.title || "EduMate Alert", {
+        body: notif.message || "",
+        icon,
+        badge: "/favicon.ico",
+        tag: notif.id, // prevents duplicate browser notifications
+      });
+      // Auto-close after 8 seconds
+      setTimeout(() => n.close(), 8000);
+    };
+
+    // Query 1: Role-wide notifications
+    const roleQ = query(
       collection(db, "notifications"),
       where("audience", "array-contains", "student"),
       limit(20),
     );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-      // Client-side sort
-      items.sort((a: any, b: any) => {
-        const tA = a.createdAt?.seconds || 0;
-        const tB = b.createdAt?.seconds || 0;
-        return tB - tA;
-      });
-
-      setNotifications(items);
-      setUnreadCount(items.length);
+    const unsub1 = onSnapshot(roleQ, (snapshot) => {
+      roleNotifs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      mergeAndSet();
     });
 
-    return () => unsub();
+    // Query 2: Personalized notifications (targetUid = this student)
+    const personalQ = query(
+      collection(db, "notifications"),
+      where("targetUid", "==", user.uid),
+      limit(20),
+    );
+    const unsub2 = onSnapshot(personalQ, (snapshot) => {
+      personalNotifs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // Trigger browser notification for NEW items only (not on first load)
+      if (!isFirstLoad) {
+        const currentIds = new Set(snapshot.docs.map((d) => d.id));
+        snapshot.docs.forEach((d) => {
+          if (!prevPersonalIds.has(d.id)) {
+            showBrowserNotification({ id: d.id, ...d.data() });
+          }
+        });
+        prevPersonalIds = currentIds;
+      } else {
+        prevPersonalIds = new Set(snapshot.docs.map((d) => d.id));
+        isFirstLoad = false;
+      }
+
+      mergeAndSet();
+    });
+
+    return () => { unsub1(); unsub2(); };
   }, [user]);
 
   // Handle click outside to close dropdown
@@ -175,11 +235,15 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
                     {notifications.map((notif: any) => (
                       <div
                         key={notif.id}
-                        className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                        className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
+                          notif.type === "warning" ? "border-l-4 border-amber-400 bg-amber-50/50" : ""
+                        }`}
                       >
                         <div className="flex justify-between items-start mb-1">
-                          <h4 className="text-sm font-semibold text-gray-800 line-clamp-1">
-                            {notif.title}
+                          <h4 className={`text-sm font-semibold line-clamp-1 ${
+                            notif.type === "warning" ? "text-amber-700" : "text-gray-800"
+                          }`}>
+                            {notif.type === "warning" ? "⚠️ " : ""}{notif.title}
                           </h4>
                           <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2 flex items-center gap-1">
                             <IoTimeOutline /> {formatDate(notif.createdAt)}

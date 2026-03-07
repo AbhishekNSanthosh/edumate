@@ -11,6 +11,7 @@ const VALID_INTENTS = [
   "students",
   "faculty",
   "departments",
+  "internals",
   "evaluation",
   "student_leaves",
 ] as const;
@@ -22,6 +23,7 @@ const CLASSIFICATION_PROMPT = `You are an intent classifier for a college portal
 - timetable: questions about class schedule, periods, today's classes, when is next class, weekly schedule
 - leaves: questions about leave applications, leave balance, applying for leave, leave history
 - results: questions about marks, grades, CGPA, performance, scores, exam results, how am I doing academically
+- internals: questions about internal marks, internal assessment, clearing internals, marks needed to pass, series exam marks, first series, second series, internal calculation, how much mark needed
 - notifications: questions about notices, announcements, alerts, updates
 - profile: questions about personal info, name, email, roll number, identity details
 - students: questions about student lists, batch students, student info (admin/faculty only)
