@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   FaRobot,
   FaTimes,
@@ -58,6 +59,23 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "classes missed",
     "attendance report",
     "attendance percentage",
+    "how many classes can i skip",
+    "how many classes can i miss",
+    "how many days can i skip",
+    "how many days can i miss",
+    "skip",
+    "bunk",
+    "maintain 75",
+    "maintain attendance",
+    "75%",
+    "shortage",
+    // Malayalam / Manglish
+    "ഹാജർ",
+    "hajr",
+    "haazir",
+    "class poyi",
+    "class poyilla",
+    "ethra class",
   ],
   assignments: [
     "assignment",
@@ -66,6 +84,10 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "deadline",
     "pending assignment",
     "due",
+    // Malayalam / Manglish
+    "അസൈൻമെന്റ്",
+    "homework kodukkana",
+    "submit cheyyanda",
   ],
   timetable: [
     "timetable",
@@ -73,6 +95,12 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "class schedule",
     "period",
     "today's class",
+    // Malayalam / Manglish
+    "ടൈംടേബിൾ",
+    "innathe class",
+    "class evide",
+    "engane class",
+    "class schedule",
   ],
   leaves: [
     "leave",
@@ -81,9 +109,21 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "leave application",
     "leave history",
     "applied leave",
+    // Malayalam / Manglish
+    "ലീവ്",
+    "leave edukkan",
+    "avanhi edukkan",
   ],
-  results: ["result", "marks", "grade", "cgpa", "performance", "score", "exam"],
-  notifications: ["notification", "notice", "announcement", "alert"],
+  results: [
+    "result", "marks", "grade", "cgpa", "performance", "score", "exam",
+    // Malayalam / Manglish
+    "മാർക്ക്", "റിസൾട്ട്", "mark kitty", "exam result", "ente marks",
+  ],
+  notifications: [
+    "notification", "notice", "announcement", "alert",
+    // Malayalam / Manglish
+    "അറിയിപ്പ്", "notice board", "enthenkilum update",
+  ],
   profile: [
     "profile",
     "my info",
@@ -97,6 +137,10 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "my email",
     "my roll",
     "my id",
+    "my account",
+    "account",
+    // Malayalam / Manglish
+    "അക്കൗണ്ട്", "പ്രൊഫൈൽ", "എന്റെ വിവരങ്ങൾ", "ente profile", "ente account",
   ],
   students: [
     "student list",
@@ -144,6 +188,12 @@ const GREETING_KEYWORDS = [
   "yo",
   "hiya",
   "greetings",
+  // Malayalam / Manglish
+  "namaskaram",
+  "sugham aano",
+  "enthaa vishesham",
+  "നമസ്കാരം",
+  "സുഖമാണോ",
 ];
 
 function isGreeting(message: string): boolean {
@@ -152,6 +202,42 @@ function isGreeting(message: string): boolean {
     (kw) =>
       lower === kw || lower.startsWith(kw + " ") || lower.endsWith(" " + kw),
   );
+}
+
+// Time/date questions — handled locally
+const TIME_DATE_KEYWORDS = [
+  "what time",
+  "what's the time",
+  "current time",
+  "time now",
+  "what date",
+  "what's the date",
+  "today's date",
+  "current date",
+  "what day",
+  "what's today",
+  "ippol samayam",
+  "samayam entha",
+  "innu entha divasam",
+  "സമയം",
+  "തീയതി",
+];
+
+function isTimeDateQuery(message: string): string | null {
+  const lower = message.toLowerCase();
+  const isTime = TIME_DATE_KEYWORDS.some((kw) => lower.includes(kw));
+  if (!isTime) return null;
+
+  const now = new Date();
+  const hasTime = ["time", "samayam", "സമയം"].some((kw) => lower.includes(kw));
+  const hasDate = ["date", "divasam", "today", "തീയതി", "day", "innu"].some((kw) => lower.includes(kw));
+
+  const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+  const dateStr = now.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+  if (hasDate && hasTime) return `📅 **${dateStr}**\n🕐 **${timeStr}**`;
+  if (hasDate) return `📅 Today is **${dateStr}**`;
+  return `🕐 The current time is **${timeStr}**`;
 }
 
 // ─────────────────────────────────────────────
@@ -796,6 +882,11 @@ function preprocessMessage(text: string): string {
 
 type MicState = "idle" | "listening" | "processing";
 
+// Detect if text contains Malayalam script
+function containsMalayalam(text: string): boolean {
+  return /[\u0D00-\u0D7F]/.test(text);
+}
+
 // ─────────────────────────────────────────────
 // EduBot Component
 // ─────────────────────────────────────────────
@@ -912,7 +1003,14 @@ export default function EduBot() {
       };
 
       try {
-        // ── Step 0: Handle greetings locally ────────
+        // ── Step 0a: Handle time/date locally ─────────
+        const timeDateAnswer = isTimeDateQuery(text);
+        if (timeDateAnswer) {
+          addBotMessage(timeDateAnswer);
+          return;
+        }
+
+        // ── Step 0b: Handle greetings locally ────────
         if (isGreeting(text)) {
           const roleLabel: Record<Role, string> = {
             admin: "Administrative Assistant",
@@ -932,17 +1030,73 @@ export default function EduBot() {
           return;
         }
 
-        // ── Step 1: Classify intent (no DB, no AI) ──
-        const intent = classifyIntent(text);
+        // ── Step 1: Classify intent (keyword match → NLP fallback) ──
+        let intent = classifyIntent(text);
+
+        // NLP fallback: if keyword matching fails, use Ollama to classify
+        if (!intent) {
+          try {
+            const classifyRes = await fetch("/api/edubot/classify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: text }),
+            });
+            if (classifyRes.ok) {
+              const { intent: nlpIntent } = await classifyRes.json();
+              if (nlpIntent && nlpIntent !== "unknown") {
+                intent = nlpIntent;
+              }
+            }
+          } catch {
+            // NLP classification failed, fall through to unknown intent message
+          }
+        }
 
         if (!intent) {
-          addBotMessage(
-            `🤔 I'm not sure what you're asking about. I can only help with information from the portal.\n\nTry asking about:\n${ROLE_ALLOWED_INTENTS[
-              resolvedUser.role
-            ]
-              .map((i) => `• ${i.replace(/_/g, " ")}`)
-              .join("\n")}`,
-          );
+          // General question — send to Ollama without Firestore data
+          try {
+            const chatHistory = messages
+              .filter((m) => m.id !== "welcome")
+              .slice(-10)
+              .map((m) => ({
+                role: m.sender === "user" ? "user" : "assistant",
+                content: m.text,
+              }));
+
+            const response = await fetch("/api/edubot", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                role: resolvedUser.role,
+                userName: resolvedUser.name,
+                intent: "general",
+                userMessage: text,
+                contextData: null,
+                chatHistory,
+              }),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              addBotMessage(data.response || "I couldn't process that. Please try again.");
+            } else {
+              addBotMessage(
+                `🤔 I'm not sure how to help with that. Try asking about:\n${ROLE_ALLOWED_INTENTS[
+                  resolvedUser.role
+                ]
+                  .map((i) => `• ${i.replace(/_/g, " ")}`)
+                  .join("\n")}`,
+              );
+            }
+          } catch {
+            addBotMessage(
+              `🤔 I'm not sure how to help with that. Try asking about:\n${ROLE_ALLOWED_INTENTS[
+                resolvedUser.role
+              ]
+                .map((i) => `• ${i.replace(/_/g, " ")}`)
+                .join("\n")}`,
+            );
+          }
           return;
         }
 
@@ -988,6 +1142,7 @@ export default function EduBot() {
             role: resolvedUser.role,
             userName: resolvedUser.name,
             intent,
+            userMessage: text, // Pass the original user message for context
             contextData,
             chatHistory, // Pass history to backend
           }),
@@ -1033,6 +1188,7 @@ export default function EduBot() {
 
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
+    // Default to English; Malayalam is handled via NLP on the text input
     recognition.lang = "en-IN";
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -1202,6 +1358,7 @@ export default function EduBot() {
                   {msg.sender === "bot" ? (
                     <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed prose-headings:font-semibold prose-headings:text-gray-800 prose-h1:text-base prose-h2:text-sm prose-h3:text-sm prose-strong:font-semibold prose-strong:text-gray-900 prose-ul:my-1 prose-ul:pl-4 prose-li:my-0.5 prose-ol:my-1 prose-ol:pl-4 prose-code:text-[11px] prose-code:bg-gray-100 prose-code:text-violet-700 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-lg prose-pre:p-3 prose-pre:text-xs prose-pre:overflow-x-auto prose-pre:my-2 prose-a:text-blue-600 prose-a:underline prose-blockquote:border-l-2 prose-blockquote:border-blue-300 prose-blockquote:pl-2 prose-blockquote:italic prose-blockquote:text-gray-600">
                       <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         components={{
                           img: ({ src, alt }) => (
                             <img
