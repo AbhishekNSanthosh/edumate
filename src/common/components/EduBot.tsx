@@ -23,6 +23,7 @@ import {
   getDoc,
   limit,
   orderBy,
+  addDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -364,6 +365,7 @@ function isIntentAllowed(role: Role, intent: string): boolean {
 async function fetchForIntent(
   intent: string,
   user: ResolvedUser,
+  userMessage?: string,
 ): Promise<any> {
   const col = collection; // just an alias for readability
 
@@ -376,7 +378,44 @@ async function fetchForIntent(
           where("studentId", "==", user.uid),
         );
         const snap = await getDocs(q);
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const bySubject: Record<string, any> = {};
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          const key = data.subjectId || data.subject || data.subjectName || "Unknown";
+          const name = data.subjectName || data.subject || key;
+          if (!bySubject[key]) bySubject[key] = { subject: name, totalClasses: 0, attendedClasses: 0 };
+          
+          if (data.totalClasses !== undefined) {
+             // old schema direct mapping
+             bySubject[key].totalClasses = data.totalClasses;
+             bySubject[key].attendedClasses = data.attendedClasses;
+          } else {
+             // new per-slot schema
+             bySubject[key].totalClasses += 1;
+             if (data.status === "Present" || data.status === "Late" || data.status === "DutyLeave") {
+                bySubject[key].attendedClasses += 1;
+             }
+          }
+        });
+        
+        // Pre-calculate predictions so AI doesn't have to do math
+        const results = Object.values(bySubject).map((s: any) => {
+          const t = s.totalClasses;
+          const a = s.attendedClasses;
+          const pct = t > 0 ? (a / t) * 100 : 0;
+          let skip = Math.floor((a - 0.75 * t) / 0.75);
+          skip = skip < 0 ? 0 : skip;
+          let need = Math.ceil(3 * t - 4 * a);
+          need = need < 0 ? 0 : need;
+          
+          return {
+            ...s,
+            attendancePercentage: pct.toFixed(1) + "%",
+            classesCanSkip: pct >= 75 ? skip : 0,
+            classesNeededToReach75: pct < 75 ? need : 0
+          };
+        });
+        return results;
       }
       if (user.role === "faculty") {
         const q = query(
@@ -392,13 +431,85 @@ async function fetchForIntent(
           where("studentId", "==", user.childUid),
         );
         const snap = await getDocs(q);
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const bySubject: Record<string, any> = {};
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          const key = data.subjectId || data.subject || data.subjectName || "Unknown";
+          const name = data.subjectName || data.subject || key;
+          if (!bySubject[key]) bySubject[key] = { subject: name, totalClasses: 0, attendedClasses: 0 };
+          
+          if (data.totalClasses !== undefined) {
+             bySubject[key].totalClasses = data.totalClasses;
+             bySubject[key].attendedClasses = data.attendedClasses;
+          } else {
+             bySubject[key].totalClasses += 1;
+             if (data.status === "Present" || data.status === "Late" || data.status === "DutyLeave") {
+                bySubject[key].attendedClasses += 1;
+             }
+          }
+        });
+        
+        const results = Object.values(bySubject).map((s: any) => {
+          const t = s.totalClasses;
+          const a = s.attendedClasses;
+          const pct = t > 0 ? (a / t) * 100 : 0;
+          let skip = Math.floor((a - 0.75 * t) / 0.75);
+          skip = skip < 0 ? 0 : skip;
+          let need = Math.ceil(3 * t - 4 * a);
+          need = need < 0 ? 0 : need;
+          
+          return {
+            ...s,
+            attendancePercentage: pct.toFixed(1) + "%",
+            classesCanSkip: pct >= 75 ? skip : 0,
+            classesNeededToReach75: pct < 75 ? need : 0
+          };
+        });
+        return results;
       }
       if (user.role === "admin") {
-        // Admin: summarise overall — fetch limited records to avoid cost
+        // Admin does NOT have personal attendance — return an institutional overview
         const q = query(col(db, "attendance"), limit(50));
         const snap = await getDocs(q);
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const records = snap.docs.map((d) => d.data());
+
+        // Collect unique student IDs to resolve names
+        const studentIds = Array.from(new Set(records.map((r) => r.studentId).filter(Boolean)));
+        const nameMap = new Map<string, string>();
+        // Batch-resolve student names (doc ID = uid)
+        await Promise.all(
+          studentIds.map(async (sid) => {
+            try {
+              const sDoc = await getDoc(doc(db, "students", sid));
+              if (sDoc.exists()) {
+                nameMap.set(sid, sDoc.data().name || "Unknown");
+              }
+            } catch { /* skip */ }
+          }),
+        );
+
+        // Deduplicate by student+subject
+        const seen = new Map<string, { studentName: string; subject: string; attended: number; total: number }>();
+        for (const r of records) {
+          const subject = r.subject || r.subjectName || "N/A";
+          const key = `${r.studentId}_${subject}`;
+          if (!seen.has(key)) {
+            seen.set(key, {
+              studentName: nameMap.get(r.studentId) || "Unknown Student",
+              subject,
+              attended: Number(r.attendedClasses ?? r.present ?? 0),
+              total: Number(r.totalClasses ?? r.total ?? 0),
+            });
+          }
+        }
+
+        return {
+          _adminOverview: true,
+          note: "This is an institutional attendance overview. Admins do not have personal attendance records.",
+          totalRecordsSampled: records.length,
+          uniqueStudents: studentIds.length,
+          summary: Array.from(seen.values()),
+        };
       }
       return null;
     }
@@ -441,47 +552,81 @@ async function fetchForIntent(
 
     // ── TIMETABLE ──────────────────────────────
     case "timetable": {
-      if (user.role === "student" && user.batchId) {
-        const q = query(
-          col(db, "timetables"),
-          where("batchId", "==", user.batchId),
-        );
-        const snap = await getDocs(q);
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Pre-process raw timetable doc into clean per-day structure for AI
+      const processTT = (docData: any, docId: string) => {
+        const entries: any[] = docData.entries || [];
+        const timings: any[] = docData.timings || [];
+        const satTimings: any[] = docData.saturdayTimings || [];
+        const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const schedule: Record<string, any[]> = {};
+        for (const day of DAYS) {
+          const dayTimings = day === "Saturday" ? satTimings : timings;
+          const slots: any[] = [];
+          for (const slot of dayTimings) {
+            if (slot.type === "interval") {
+              slots.push({ time: slot.time, type: "break", label: slot.label || "Break" });
+            } else {
+              const entry = entries.find((e: any) => e.day === day && e.time === slot.time);
+              if (entry) {
+                slots.push({ time: entry.time, type: "class", subject: entry.subject, faculty: entry.faculty, room: entry.room || null });
+              }
+            }
+          }
+          if (slots.some((s) => s.type === "class")) schedule[day] = slots;
+        }
+        return { batchId: docId, schedule };
+      };
+
+      if (user.role === "student") {
+        if (user.batchId) {
+          const ttSnap = await getDoc(doc(db, "timetables", user.batchId));
+          if (ttSnap.exists()) return processTT(ttSnap.data(), ttSnap.id);
+        }
+        if (!user.batchId) {
+          const allSnap = await getDocs(collection(db, "timetables"));
+          if (!allSnap.empty) return processTT(allSnap.docs[0].data(), allSnap.docs[0].id);
+        }
+        return null;
       }
       if (user.role === "faculty") {
-        const q = query(
-          col(db, "timetables"),
-          where("facultyId", "==", user.uid),
-        );
-        const snap = await getDocs(q);
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const snap = await getDocs(collection(db, "timetables"));
+        const batchesSnap = await getDocs(collection(db, "batches"));
+        const batchMap: Record<string, string> = {};
+        batchesSnap.docs.forEach(d => { batchMap[d.id] = d.data().name || d.id; });
+        const grouped: Record<string, any[]> = {};
+        const normName = user.name.trim().toLowerCase();
+        snap.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          const batchName = batchMap[docSnap.id] || docSnap.id;
+          (data.entries || []).forEach((entry: any) => {
+            if ((entry.faculty || "").trim().toLowerCase() === normName) {
+              if (!grouped[entry.day]) grouped[entry.day] = [];
+              grouped[entry.day].push({ time: entry.time, subject: entry.subject, batch: batchName, room: entry.room || null });
+            }
+          });
+        });
+        return { schedule: grouped };
       }
       if (user.role === "parent" && user.childUid) {
-        // Get child's batchId first
-        const studentSnap = await getDocs(
-          query(col(db, "students"), where("uid", "==", user.childUid)),
-        );
-        if (!studentSnap.empty) {
-          const studentData = studentSnap.docs[0].data();
-          const batchId = studentData.batchId;
+        const studentSnap = await getDoc(doc(db, "students", user.childUid));
+        if (studentSnap.exists()) {
+          const batchId = studentSnap.data().batchId;
           if (batchId) {
-            const q = query(
-              col(db, "timetables"),
-              where("batchId", "==", batchId),
-            );
-            const snap = await getDocs(q);
-            return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            const ttSnap = await getDoc(doc(db, "timetables", batchId));
+            if (ttSnap.exists()) return processTT(ttSnap.data(), ttSnap.id);
           }
         }
+        return null;
       }
       if (user.role === "admin") {
-        const q = query(col(db, "timetables"), limit(20));
+        const q = query(collection(db, "timetables"), limit(10));
         const snap = await getDocs(q);
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        return snap.docs.map((d) => processTT(d.data(), d.id));
       }
       return null;
     }
+
+
 
     // ── LEAVES ──────────────────────────────────
     case "leaves": {
@@ -494,21 +639,43 @@ async function fetchForIntent(
         return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       }
       if (user.role === "faculty") {
-        // Fetch both leave applications and balances
-        const [leavesSnap, balancesSnap] = await Promise.all([
-          getDocs(
-            query(
-              col(db, "faculty_leaves"),
-              where("facultyId", "==", user.uid),
-            ),
-          ),
-          getDocs(
+        let balancesSnap = await getDocs(
+          query(
+            col(db, "leave_balances"),
+            where("facultyId", "==", user.uid),
+          )
+        );
+
+        // If balances were never initialized (faculty hasn't opened Leave page yet), generate them now
+        if (balancesSnap.empty) {
+          const balanceRef = col(db, "leave_balances");
+          const defaults = [
+            { name: "Casual Leave", code: "CL", balance: 12, description: "Personal reasons, max 3 consecutive days" },
+            { name: "Sick Leave", code: "SL", balance: 10, description: "Medical reasons with certificate" },
+            { name: "On Duty", code: "OD", balance: 5, description: "Official duty outside campus" },
+            { name: "Earned Leave", code: "EL", balance: 20, description: "Accumulated leave" },
+          ];
+          
+          for (const type of defaults) {
+            await addDoc(balanceRef, { ...type, facultyId: user.uid });
+          }
+          
+          // Re-fetch now that they are populated
+          balancesSnap = await getDocs(
             query(
               col(db, "leave_balances"),
               where("facultyId", "==", user.uid),
-            ),
-          ),
-        ]);
+            )
+          );
+        }
+
+        const leavesSnap = await getDocs(
+          query(
+            col(db, "faculty_leaves"),
+            where("facultyId", "==", user.uid),
+          )
+        );
+
         return {
           applications: leavesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
           balances: balancesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
@@ -637,36 +804,110 @@ async function fetchForIntent(
         return null;
       }
       if (user.role === "admin") {
-        // Admins: try by email since admins collection structure may vary
         const q = query(col(db, "admins"), where("email", "==", user.email));
         const snap = await getDocs(q);
-        return snap.empty ? null : snap.docs[0].data();
+        if (!snap.empty) {
+          const d = snap.docs[0].data();
+          // Return all fields except sensitive ones (uid, password, tokens)
+          const sensitiveKeys = ["uid", "password", "token", "refreshToken", "createdAt", "updatedAt"];
+          const filtered: Record<string, any> = { role: "Admin" };
+          for (const [key, value] of Object.entries(d)) {
+            if (!sensitiveKeys.includes(key) && value !== undefined && value !== null && value !== "") {
+              filtered[key] = value;
+            }
+          }
+          return filtered;
+        }
+        // Fallback: use resolvedUser info if admins doc not found
+        return {
+          name: user.name,
+          email: user.email,
+          role: "Admin",
+        };
       }
       return null;
     }
 
     // ── STUDENTS (faculty & admin only) ────────
     case "students": {
-      if (user.role === "faculty" && user.batchId) {
-        const q = query(
-          col(db, "students"),
-          where("batchId", "==", user.batchId),
-        );
-        const snap = await getDocs(q);
-        // Return only non-sensitive fields
-        return snap.docs.map((d) => {
-          const data = d.data();
-          return {
+      if (user.role === "faculty") {
+        let targetBatchId = user.batchId;
+        let targetAcademicYear = "";
+        let targetDepartment = "";
+        
+        if (!targetBatchId) {
+           const allBatches = await getDocs(col(db, "batches"));
+           const tutorBatch = allBatches.docs.find(d => {
+             const b = d.data();
+             return (
+               b.tutor === user.name ||
+               b.tutorId === user.uid ||
+               (Array.isArray(b.tutors) && b.tutors.some((t: any) => t.id === user.uid || t.name === user.name))
+             );
+           });
+           
+           if (tutorBatch) {
+              targetBatchId = tutorBatch.id;
+              targetAcademicYear = tutorBatch.data().academicYear || "";
+              targetDepartment = tutorBatch.data().department || "";
+           }
+        }
+
+        if (!targetBatchId && !targetAcademicYear && !targetDepartment) {
+            return []; // No batch assigned
+        }
+
+        let studentsList: any[] = [];
+        
+        // 1. Primary: batch == targetAcademicYear
+        if (targetAcademicYear) {
+           const snap = await getDocs(query(col(db, "students"), where("batch", "==", targetAcademicYear)));
+           studentsList = snap.docs.map(d => d.data());
+        }
+        
+        // 2. Fallback: batchId == targetBatchId
+        if (studentsList.length === 0 && targetBatchId) {
+            const snap = await getDocs(query(col(db, "students"), where("batchId", "==", targetBatchId)));
+            studentsList = snap.docs.map(d => d.data());
+        }
+
+        // 3. Last Resort: filter all by normalized department
+        if (studentsList.length === 0 && targetDepartment) {
+           const allSnap = await getDocs(col(db, "students"));
+           const normTarget = targetDepartment.toLowerCase().replace(/\s*&amp;\s*/g, " and ").replace(/\s*&\s*/g, " and ").replace(/\s+/g, " ").trim();
+           studentsList = allSnap.docs.map(d => d.data()).filter((s:any) => {
+              const dNorm = (s.department || "").toLowerCase().replace(/\s*&amp;\s*/g, " and ").replace(/\s*&\s*/g, " and ").replace(/\s+/g, " ").trim();
+              return dNorm === normTarget;
+           });
+        }
+        
+        return studentsList.map(data => ({
             name: data.name,
             regNumber: data.regNumber,
-            batchId: data.batchId,
-          };
-        });
+            rollNumber: data.rollNumber,
+            batch: data.batch,
+            department: data.department
+        }));
       }
       if (user.role === "admin") {
-        const q = query(col(db, "students"), limit(30));
-        const snap = await getDocs(q);
-        return snap.docs.map((d) => {
+        // Map common abbreviations to possible full department names
+        const DEPT_ALIASES: Record<string, string[]> = {
+          CS: ["Computer Science", "CS"],
+          CSE: ["Computer Science & Engineering", "Computer Science and Engineering", "CSE", "Computer Science"],
+          ME: ["Mechanical Engineering", "Mechanical", "ME", "MECH"],
+          MECH: ["Mechanical Engineering", "Mechanical", "ME", "MECH"],
+          CE: ["Civil Engineering", "Civil", "CE"],
+          CIVIL: ["Civil Engineering", "Civil", "CE"],
+          ECE: ["Electronics & Communication", "Electronics and Communication", "ECE"],
+          EC: ["Electronics & Communication", "Electronics and Communication", "ECE", "EC"],
+          EEE: ["Electrical & Electronics", "Electrical and Electronics", "EEE"],
+          EE: ["Electrical Engineering", "Electrical", "EEE", "EE"],
+          IT: ["Information Technology", "IT"],
+        };
+
+        const deptMatch = userMessage?.toUpperCase().match(/\b(CSE|CS|MECH|ME|CIVIL|CE|ECE|EC|EEE|EE|IT)\b/);
+        const snap = await getDocs(col(db, "students"));
+        let allStudents = snap.docs.map((d) => {
           const data = d.data();
           return {
             name: data.name,
@@ -675,6 +916,23 @@ async function fetchForIntent(
             batch: data.batch,
           };
         });
+
+        let deptLabel = "All";
+        if (deptMatch) {
+          const aliases = DEPT_ALIASES[deptMatch[1]] || [deptMatch[1]];
+          deptLabel = deptMatch[1];
+          allStudents = allStudents.filter((s) =>
+            aliases.some((alias) =>
+              s.department?.toLowerCase().includes(alias.toLowerCase()),
+            ),
+          );
+        }
+
+        return {
+          totalCount: allStudents.length,
+          department: deptLabel,
+          students: allStudents,
+        };
       }
       return null;
     }
@@ -830,15 +1088,34 @@ async function resolveUser(
     const studentDoc = await getDoc(doc(db, "students", uid));
     if (studentDoc.exists()) {
       const data = studentDoc.data();
+      let batchId = data.batchId || "";
+
+      // If batchId is not stored directly, resolve it from the batch name via batches collection
+      if (!batchId && data.batch) {
+        try {
+          const batchSnap = await getDocs(collection(db, "batches"));
+          const matchedBatch = batchSnap.docs.find((d) => {
+            const bName = d.data().name || "";
+            return (
+              bName === data.batch ||
+              bName.includes(data.batch) ||
+              data.batch.includes(bName)
+            );
+          });
+          if (matchedBatch) batchId = matchedBatch.id;
+        } catch { /* skip */ }
+      }
+
       return {
         uid,
         name: data.name || displayName || email.split("@")[0],
         email,
         role: "student",
-        batchId: data.batchId,
+        batchId,
         regNumber: data.regNumber || data.rollNumber || "",
       };
     }
+
 
     // 2. Check faculty — doc ID IS the Firebase Auth UID
     const facultyDoc = await getDoc(doc(db, "faculty", uid));
@@ -1288,23 +1565,23 @@ export default function EduBot() {
 
             if (response.ok) {
               const data = await response.json();
-              addBotMessage(data.response || "I couldn't process that. Please try again.");
+              addBotMessage(data.response || "I wasn't able to process that right now. Could you try rephrasing your question? 😊");
             } else {
               addBotMessage(
-                `🤔 I'm not sure how to help with that. Try asking about:\n${ROLE_ALLOWED_INTENTS[
+                `😊 I'd love to help, but I'm not quite sure what you're looking for! Here are some things I can assist you with:\n${ROLE_ALLOWED_INTENTS[
                   resolvedUser.role
                 ]
                   .map((i) => `• ${i.replace(/_/g, " ")}`)
-                  .join("\n")}`,
+                  .join("\n")}\n\nFeel free to ask about any of these, or try the quick actions above!`,
               );
             }
           } catch {
             addBotMessage(
-              `🤔 I'm not sure how to help with that. Try asking about:\n${ROLE_ALLOWED_INTENTS[
+              `😊 I'd love to help, but I'm not quite sure what you're looking for! Here are some things I can assist you with:\n${ROLE_ALLOWED_INTENTS[
                 resolvedUser.role
               ]
                 .map((i) => `• ${i.replace(/_/g, " ")}`)
-                .join("\n")}`,
+                .join("\n")}\n\nFeel free to ask about any of these, or try the quick actions above!`,
             );
           }
           return;
@@ -1313,11 +1590,11 @@ export default function EduBot() {
         // ── Step 2: Role gate (hard block) ──────────
         if (!isIntentAllowed(resolvedUser.role, intent)) {
           addBotMessage(
-            `🔒 Access Denied\n\nYou don't have permission to view that information. As a **${resolvedUser.role}**, you can only access:\n${ROLE_ALLOWED_INTENTS[
+            `🔒 **Access Restricted**\n\nSorry, that information isn't available for your role. As a **${resolvedUser.role}**, here's what I can help you with:\n${ROLE_ALLOWED_INTENTS[
               resolvedUser.role
             ]
               .map((i) => `• ${i.replace(/_/g, " ")}`)
-              .join("\n")}`,
+              .join("\n")}\n\nJust ask about any of these and I'll be happy to help! 😊`,
           );
           return;
         }
@@ -1325,11 +1602,11 @@ export default function EduBot() {
         // ── Step 3: Fetch data from Firestore ───────
         let contextData: any = null;
         try {
-          contextData = await fetchForIntent(intent, resolvedUser);
+          contextData = await fetchForIntent(intent, resolvedUser, text);
         } catch (dbError) {
           console.error("DB fetch error:", dbError);
           addBotMessage(
-            "⚠️ Could not retrieve data from the server. Please try again.",
+            "😔 Oops! I'm having trouble reaching the server right now. Please try again in a moment — I'll be ready to help!",
           );
           return;
         }
@@ -1366,7 +1643,7 @@ export default function EduBot() {
         addBotMessage(data.response || "No response from server.");
       } catch (error) {
         console.error("EduBot error:", error);
-        addBotMessage("⚠️ Something went wrong. Please try again.");
+        addBotMessage("😔 Something unexpected happened on my end. Please try again — I'm sure we'll get it right this time!");
         setIsTyping(false);
       }
     },

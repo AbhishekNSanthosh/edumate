@@ -31,10 +31,10 @@ export default function FeesPage() {
           (doc) => ({ id: doc.id, ...doc.data() }) as any,
         );
 
-        // Sort manually if needed or use orderBy in query if index exists
-        feesData.sort(
-          (a, b) => (b.dueDate?.seconds || 0) - (a.dueDate?.seconds || 0),
-        );
+        feesData.sort((a, b) => {
+          const toMs = (d: any) => d?.seconds ? d.seconds * 1000 : d ? new Date(d).getTime() : 0;
+          return toMs(b.dueDate) - toMs(a.dueDate);
+        });
 
         setFees(feesData);
 
@@ -102,10 +102,14 @@ export default function FeesPage() {
     }).format(amount);
   };
 
-  // Helper to format date
-  const formatDate = (timestamp: any) => {
+  const formatDate = (timestamp: any): string => {
     if (!timestamp) return "N/A";
-    return new Date(timestamp.seconds * 1000).toLocaleDateString();
+    if (timestamp.seconds) return new Date(timestamp.seconds * 1000).toLocaleDateString("en-IN");
+    if (typeof timestamp === "string") {
+      const d = new Date(timestamp);
+      return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString("en-IN");
+    }
+    return "N/A";
   };
 
   return (

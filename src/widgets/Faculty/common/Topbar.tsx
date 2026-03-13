@@ -10,6 +10,7 @@ import {
   collection,
   onSnapshot,
   query,
+  where,
   orderBy,
   limit,
   updateDoc,
@@ -75,33 +76,36 @@ export default function Topbar() {
     fetchProfile();
   }, [user]);
 
-  // Fetch Notifications
+  // Fetch Notifications (Personalized only)
   useEffect(() => {
-    const q = query(
+    if (!user) return;
+
+    const personalQ = query(
       collection(db, "notifications"),
-      orderBy("createdAt", "desc"),
-      limit(20),
+      where("targetUid", "==", user.uid),
+      limit(20)
     );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list = snapshot.docs.map((doc) => ({
+    const unsub = onSnapshot(personalQ, (snapshot) => {
+      const list = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        let timeVal = "";
+        if (data.createdAt) {
+           timeVal = typeof data.createdAt.toDate === 'function' 
+             ? data.createdAt.toDate().toISOString()
+             : new Date(data.createdAt).toISOString();
+        }
+        return {
           id: doc.id,
-          ...doc.data(),
-          time: doc.data().createdAt
-            ? new Date(doc.data().createdAt).toLocaleString()
-            : "",
-        }));
-        setNotifications(list);
-      },
-      (error) => {
-        console.error("Notification Error:", error);
-      },
-    );
+          ...data,
+          time: timeVal,
+        };
+      }).sort((a, b) => b.time.localeCompare(a.time));
+      setNotifications(list);
+    }, (error) => console.error("Notification Error:", error));
 
-    return () => unsubscribe();
-  }, []);
+    return () => unsub();
+  }, [user]);
 
   // Handle Search
   useEffect(() => {
@@ -168,6 +172,18 @@ export default function Topbar() {
       toast.success("All notifications marked as read");
     } catch (error) {
       console.error("Error updating notifications", error);
+    }
+  };
+
+  const handleNotificationClick = async (notif: any) => {
+    if (!notif.read) {
+       try {
+         await updateDoc(doc(db, "notifications", notif.id), { read: true });
+       } catch(e) { console.error(e); }
+    }
+    setShowNotifications(false);
+    if (notif.link) {
+       router.push(notif.link);
     }
   };
 
@@ -268,31 +284,37 @@ export default function Topbar() {
               </div>
               <div className="max-h-[300px] overflow-y-auto">
                 {notifications.length > 0 ? (
-                  notifications.map((notif) => (
+                  notifications.map((notif) => {
+                    // Safe parse time
+                    let formatTime = "";
+                    if (notif.time) {
+                       const d = new Date(notif.time);
+                       if (!isNaN(d.getTime())) {
+                          formatTime = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                       }
+                    }
+                    
+                    return (
                     <div
                       key={notif.id}
+                      onClick={() => handleNotificationClick(notif)}
                       className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer ${!notif.read ? "bg-blue-50/50" : ""}`}
                     >
-                      <div className="flex justify-between items-start mb-1">
+                      <div className="flex justify-between items-start mb-1 gap-2">
                         <span
-                          className={`font-medium text-sm ${!notif.read ? "text-gray-900" : "text-gray-700"}`}
+                          className={`font-medium text-sm leading-tight ${!notif.read ? "text-gray-900" : "text-gray-700"}`}
                         >
                           {notif.title}
                         </span>
-                        <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">
-                          {notif.time
-                            ? new Date(notif.time).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : ""}
+                        <span className="text-[10px] text-gray-400 whitespace-nowrap shrink-0">
+                          {formatTime}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 line-clamp-2">
+                      <p className="text-xs text-gray-500 line-clamp-3">
                         {notif.message}
                       </p>
                     </div>
-                  ))
+                  )})
                 ) : (
                   <div className="p-8 text-center text-gray-500 text-sm">
                     No new notifications

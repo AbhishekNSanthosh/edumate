@@ -33,17 +33,31 @@ export default function ParentDashboard() {
             setStudentData(studentDoc.data());
         }
 
-        // 2. Fetch Notifications (Parent specific + All)
-        const notifQuery = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(20)); 
-        const notifSnap = await getDocs(notifQuery);
-        const filteredNotifs = notifSnap.docs
-            .map(d => ({id: d.id, ...d.data()} as any))
-            .filter(n => {
-                 // Must include 'parent' or 'all'
-                 return n.audience && (n.audience.includes('parent') || n.audience.includes('all'));
-            })
-            .slice(0, 3);
-        setNotifications(filteredNotifs);
+        // 2. Fetch Notifications (Parent-specific + personalized)
+        const [roleNotifSnap, personalNotifSnap] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, "notifications"),
+              where("audience", "array-contains", "parent"),
+              limit(10),
+            ),
+          ),
+          getDocs(
+            query(
+              collection(db, "notifications"),
+              where("targetUid", "==", user.uid),
+              limit(10),
+            ),
+          ),
+        ]);
+        const notifMap = new Map<string, any>();
+        [...roleNotifSnap.docs, ...personalNotifSnap.docs].forEach((d) =>
+          notifMap.set(d.id, { id: d.id, ...d.data() }),
+        );
+        const sortedNotifs = Array.from(notifMap.values())
+          .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+          .slice(0, 3);
+        setNotifications(sortedNotifs);
 
         // 3. Fetch Fees (For Reminders)
         const feeQuery = query(collection(db, "fees"), where("studentId", "==", user.uid), where("status", "in", ["pending", "overdue"]));

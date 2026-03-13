@@ -68,16 +68,31 @@ export default function FacultyDashboard() {
         );
         setLeaves(sortedLeaves.slice(0, 1));
 
-        // 4. Fetch Notifications (Announcements)
-        const notifQuery = query(
-          collection(db, "notifications"),
-          orderBy("createdAt", "desc"),
-          limit(5),
+        // 4. Fetch Notifications (Faculty-specific + personalized)
+        const [roleNotifSnap, personalNotifSnap] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, "notifications"),
+              where("audience", "array-contains", "faculty"),
+              limit(10),
+            ),
+          ),
+          getDocs(
+            query(
+              collection(db, "notifications"),
+              where("targetUid", "==", user.uid),
+              limit(10),
+            ),
+          ),
+        ]);
+        const notifMap = new Map<string, any>();
+        [...roleNotifSnap.docs, ...personalNotifSnap.docs].forEach((d) =>
+          notifMap.set(d.id, { id: d.id, ...d.data() }),
         );
-        const notifSnap = await getDocs(notifQuery);
-        setNotifications(
-          notifSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-        );
+        const sortedNotifs = Array.from(notifMap.values())
+          .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+          .slice(0, 5);
+        setNotifications(sortedNotifs);
       } catch (error) {
         console.error("Error loading dashboard data", error);
       } finally {

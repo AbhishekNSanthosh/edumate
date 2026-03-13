@@ -1,4 +1,4 @@
-import { MdAccessTimeFilled, MdAssessment, MdAssignmentTurnedIn, MdDescription, MdEventNote, MdExitToApp, MdFolder, MdGavel, MdGroups, MdGroupWork, MdHistory, MdMailOutline, MdMenuBook, MdOutlineAssessment, MdOutlineCalendarMonth, MdOutlineDirectionsBus, MdOutlineHotel, MdOutlineManageAccounts, MdPeopleAlt, MdSpaceDashboard, MdStarRate } from "react-icons/md";
+import { MdAccessTimeFilled, MdAssessment, MdAssignmentTurnedIn, MdDescription, MdEventNote, MdExitToApp, MdFolder, MdGavel, MdGroups, MdGroupWork, MdHistory, MdMailOutline, MdMenuBook, MdNotificationsActive, MdOutlineAssessment, MdOutlineCalendarMonth, MdOutlineDirectionsBus, MdOutlineHotel, MdOutlineManageAccounts, MdPeopleAlt, MdSpaceDashboard, MdStarRate, MdQuiz, MdCampaign, MdReceiptLong, MdDiscount, MdSchool, MdBadge } from "react-icons/md";
 import { IoIosStats, IoMdPeople } from "react-icons/io";
 import { FaGraduationCap, FaUniversity, FaUsers } from "react-icons/fa";
 import { RiSettings3Fill } from "react-icons/ri";
@@ -98,6 +98,20 @@ export const adminSideBarMenu: SideBarMenuItem[] = [
     icon: FaUniversity,
     rightsToView: ["admin"],
   },
+
+  // COMMUNICATION & REPORTS
+  {
+    name: "Push Notifications",
+    link: "push-notifications",
+    icon: MdCampaign,
+    rightsToView: ["admin"],
+  },
+  {
+    name: "Reports",
+    link: "reports",
+    icon: MdAssessment,
+    rightsToView: ["admin"],
+  },
 ];
 
 export const sideBarMenu: SideBarMenuItem[] = [
@@ -129,6 +143,18 @@ export const sideBarMenu: SideBarMenuItem[] = [
     name: "Assignments",
     link: "assignments",
     icon: MdAssignment,
+    rightsToView: ["admin", "faculty", "student"],
+  },
+  {
+    name: "Study Materials",
+    link: "study-materials",
+    icon: MdMenuBook,
+    rightsToView: ["admin", "faculty", "student"],
+  },
+  {
+    name: "Quizzes",
+    link: "quizzes",
+    icon: MdQuiz,
     rightsToView: ["admin", "faculty", "student"],
   },
   {
@@ -216,6 +242,12 @@ export const facultySideBarMenu: SideBarMenuItem[] = [
     rightsToView: ["faculty"],
   },
   {
+    name: "My Batch",
+    link: "my-batch",
+    icon: MdGroups,
+    rightsToView: ["faculty"],
+  },
+  {
     name: "Timetable",
     link: "timetable",
     icon: MdOutlineCalendarMonth,
@@ -264,6 +296,12 @@ export const facultySideBarMenu: SideBarMenuItem[] = [
     rightsToView: ["faculty"],
   },
   {
+    name: "Leave Approvals",
+    link: "leave-approvals",
+    icon: MdAssignmentTurnedIn,
+    rightsToView: ["faculty"], // Filtered by role (HOD/Principal/Director) on the page
+  },
+  {
     name: "Student Leave Management",
     link: "student-leave-management",
     icon: MdPeopleAlt,
@@ -300,6 +338,18 @@ export const facultySideBarMenu: SideBarMenuItem[] = [
     rightsToView: ["faculty"],
   },
   {
+    name: "Study Materials",
+    link: "study-materials",
+    icon: MdMenuBook,
+    rightsToView: ["faculty"],
+  },
+  {
+    name: "Quizzes",
+    link: "quizzes",
+    icon: MdQuiz,
+    rightsToView: ["faculty"],
+  },
+  {
     name: "Staff Appraisal",
     link: "staff-appraisal",
     icon: MdOutlineAssessment,
@@ -318,6 +368,64 @@ export const facultySideBarMenu: SideBarMenuItem[] = [
     rightsToView: ["faculty"],
   },
 ];
+
+export const officeSideBarMenu: SideBarMenuItem[] = [
+  {
+    name: "Dashboard",
+    link: "dashboard",
+    icon: MdSpaceDashboard,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Batch Fee Management",
+    link: "batch-fees",
+    icon: MdGroups,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Hostel & Transport",
+    link: "hostel-transport",
+    icon: MdOutlineHotel,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Student Fees",
+    link: "student-fees",
+    icon: MdReceiptLong,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Fee Discounts",
+    link: "fee-discounts",
+    icon: MdDiscount,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Scholarships",
+    link: "scholarships",
+    icon: MdSchool,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Staff Directory",
+    link: "staff",
+    icon: MdBadge,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Payment History",
+    link: "payment-history",
+    icon: MdPayment,
+    rightsToView: ["office"],
+  },
+  {
+    name: "Reports",
+    link: "reports",
+    icon: MdAssessment,
+    rightsToView: ["office"],
+  },
+];
+
 
 export const COLLECTIONS = {
   ADMINS: "admins",
@@ -339,12 +447,20 @@ export const COLLECTIONS = {
   MESSAGES: "messages",
   NOTIFICATIONS: "notifications",
   PARENTS: "parents",
+  QUIZZES: "quizzes",
+  QUIZ_SUBMISSIONS: "quiz_submissions",
   SETTINGS: "settings",
   STUDENT_LEAVES: "student_leaves",
   STUDENT_SERVICES: "student_services",
   STUDENTS: "students",
+  STUDY_MATERIALS: "study_materials",
   SUBJECTS: "subjects",
   TIMETABLES: "timetables",
+  OFFICE_STAFF: "office_staff",
+  FEE_DISCOUNTS: "fee_discounts",
+  SCHOLARSHIPS: "scholarships",
+  FEES: "fees",
+  PAYMENT_HISTORY: "payment_history",
 } as const;
 
 export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
@@ -502,11 +618,35 @@ export interface FacultyLeave {
   createdAt: any; // Firebase Timestamp
   days: number;
   facultyId: string;
+  facultyName: string;
+  facultyDepartment: string;
   fromDate: string;
   reason: string;
-  status: string; // e.g. "pending"
+  status: string; // e.g. "pending_hod", "pending_principal", "pending_director", "approved", "rejected", "cancelled"
   toDate: string;
   type: string; // e.g. "CL"
+  // Approval workflow fields
+  currentApprover: 'hod' | 'principal' | 'director' | 'none';
+  isLateSubmission: boolean; // true if submitted after 8:30 AM of leave date
+  submittedAt: string; // ISO timestamp of submission
+  // HOD action
+  hodId?: string;
+  hodName?: string;
+  hodStatus?: 'pending' | 'recommended' | 'rejected';
+  hodRemarks?: string;
+  hodActionDate?: string;
+  // Principal action
+  principalId?: string;
+  principalName?: string;
+  principalStatus?: 'pending' | 'approved' | 'rejected' | 'disabled';
+  principalRemarks?: string;
+  principalActionDate?: string;
+  // Director action
+  directorId?: string;
+  directorName?: string;
+  directorStatus?: 'pending' | 'approved' | 'rejected';
+  directorRemarks?: string;
+  directorActionDate?: string;
 }
 
 export interface FacultyProfile {
@@ -641,4 +781,70 @@ export interface Timetable {
   batch: string;
   createdAt: any; // Firebase Timestamp
   schedule?: Record<string, string[]>; // e.g., map of day (e.g., "Monday") to an array of subject codes/names
+}
+
+export interface OfficeStaff {
+  uid?: string;
+  email: string;
+  name: string;
+  avatar?: string;
+  role: string; // e.g. "office"
+}
+
+export interface FeeRecord {
+  id?: string;
+  studentId: string;
+  studentName: string;
+  regNumber: string;
+  batch: string;
+  department: string;
+  feeType: string; // e.g. "Tuition", "Hostel", "Transport", "Lab", "Exam"
+  amount: number;
+  dueDate: string;
+  status: "paid" | "pending" | "overdue" | "partial";
+  paidAmount: number;
+  paidDate?: string;
+  semester: string;
+  academicYear: string;
+  createdAt: any;
+  updatedAt?: any;
+}
+
+export interface FeeDiscount {
+  id?: string;
+  studentId: string;
+  studentName: string;
+  regNumber: string;
+  batch: string;
+  department: string;
+  discountType: string; // e.g. "Merit", "Need-based", "Sibling", "Staff Ward", "Sports"
+  percentage: number;
+  amount: number;
+  reason: string;
+  status: "active" | "expired" | "revoked";
+  appliedFrom: string;
+  appliedTo: string;
+  approvedBy: string;
+  createdAt: any;
+}
+
+export interface Scholarship {
+  id?: string;
+  name: string;
+  description: string;
+  provider: string; // e.g. "Government", "Institution", "Private", "NGO"
+  amount: number;
+  eligibility: string;
+  status: "active" | "closed" | "upcoming";
+  applicationDeadline: string;
+  academicYear: string;
+  recipientCount: number;
+  recipients?: {
+    studentId: string;
+    studentName: string;
+    regNumber: string;
+    amount: number;
+    status: "awarded" | "disbursed" | "pending";
+  }[];
+  createdAt: any;
 }

@@ -13,6 +13,8 @@ export default function AddFaculty() {
   const [loading, setLoading] = useState(false)
   const [departments, setDepartments] = useState<string[]>([])
   
+  const [nextUid, setNextUid] = useState('');
+
   const [formData, setFormData] = useState({
     name: '',
     uid: '',
@@ -26,23 +28,39 @@ export default function AddFaculty() {
   })
 
   useEffect(() => {
-    const fetchDepartments = async () => {
+    const fetchInitialData = async () => {
         try {
-            const querySnapshot = await getDocs(collection(db, "departments"));
-            const deptNames = querySnapshot.docs.map(doc => doc.data().name);
+            // Fetch departments
+            const deptSnapshot = await getDocs(collection(db, "departments"));
+            const deptNames = deptSnapshot.docs.map(doc => doc.data().name);
             setDepartments(deptNames);
+
+            // Generate next faculty UID (CCET/FAC/001 format)
+            const facultySnapshot = await getDocs(collection(db, "faculty"));
+            let maxNum = 0;
+            facultySnapshot.docs.forEach(doc => {
+                const uid = doc.data().uid || '';
+                const match = uid.match(/CCET\/FAC\/(\d+)/);
+                if (match) {
+                    const num = parseInt(match[1], 10);
+                    if (num > maxNum) maxNum = num;
+                }
+            });
+            const generated = `CCET/FAC/${String(maxNum + 1).padStart(3, '0')}`;
+            setNextUid(generated);
+            setFormData(prev => ({ ...prev, uid: generated }));
         } catch (error) {
-            console.error("Failed to fetch departments", error);
+            console.error("Failed to fetch initial data", error);
         }
     }
-    fetchDepartments();
+    fetchInitialData();
   }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: name === 'uid' ? value.toUpperCase() : value
+      [name]: value
     })
   }
 
@@ -98,7 +116,7 @@ export default function AddFaculty() {
            createdAt: new Date().toISOString(),
            read: false,
            type: 'info',
-           audience: ['admin', 'faculty']
+           audience: ['admin']
        });
        
        // 5. Cleanup Secondary Auth
@@ -146,16 +164,16 @@ export default function AddFaculty() {
                     />
                 </div>
                 <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Faculty ID (UID)</label>
-                    <input 
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Faculty ID (Auto-assigned)</label>
+                    <input
                         name="uid"
                         value={formData.uid}
-                        onChange={handleChange}
-                        type="text" 
-                        required
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                        placeholder="e.g. FAC-001"
+                        type="text"
+                        readOnly
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed outline-none"
+                        placeholder="Generating..."
                     />
+                    <p className="text-xs text-gray-500 mt-1">Auto-generated in CCET/FAC/XXX format</p>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -230,7 +248,11 @@ export default function AddFaculty() {
                         <option value="Faculty">Faculty</option>
                         <option value="Tutor">Tutor</option>
                         <option value="Coordinator">Coordinator</option>
-                         <option value="HOD">HOD</option>
+                        <option value="HOD">HOD</option>
+                        <option value="Director">Director</option>
+                        <option value="Principal">Principal</option>
+                        <option value="Bursar">Bursar</option>
+                        <option value="Super Admin">Super Admin</option>
                     </select>
                 </div>
                  <div>

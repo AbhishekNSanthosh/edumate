@@ -15,7 +15,7 @@ const ROLE_PERSONAS: Record<string, string> = {
 // Topics each role is STRICTLY limited to
 const ROLE_TOPICS: Record<string, string> = {
   admin:
-    "student records, faculty records, departments, attendance, assignments, timetables, evaluation reports, notifications, leave requests",
+    "institutional attendance overview (NOT personal — admins do not attend classes), student records, faculty records, departments, assignments, timetables, evaluation reports, notifications, leave requests",
   faculty:
     "your own attendance, your own leave balances and applications, your own profile, your assigned batches and students, assignments for your subjects, your timetable, evaluation reports",
   student:
@@ -55,8 +55,8 @@ REFERENCE MALAYALAM PHRASES (use these exactly):
 STRICT: If you do not know a Malayalam word, use the ENGLISH word. NEVER use Burmese, Telugu, Hindi, Japanese, or any other script.`;
 
     const languageInstruction = isMalayalam
-      ? `\n⚠️ LANGUAGE: The user is writing in Malayalam. Respond in Malayalam script. Keep data values in English.\n${MALAYALAM_VOCAB}`
-      : "\n⚠️ LANGUAGE: The user is writing in English. You MUST respond ENTIRELY in English. Do NOT use Malayalam, Hindi, or any non-English script anywhere in your response — not in headers, not in table labels, not anywhere. Every word must be in English.";
+      ? `\n⚠️ LANGUAGE MODE: MALAYALAM.\nThe user is writing in Malayalam. Respond ENTIRELY in Malayalam script (keep data values in English).\n${MALAYALAM_VOCAB}`
+      : "\n⚠️ LANGUAGE MODE: ENGLISH.\nThe user is writing in English. You MUST respond ENTIRELY in English. Do NOT use any foreign scripts or languages. Every single word in your response must be English.";
 
     // Validate role
     const allowedRoles = ["admin", "faculty", "student", "parent"];
@@ -102,7 +102,7 @@ RULES:
 - For questions about navigating the portal, give helpful guidance.
 - You can answer general knowledge questions briefly, but always remind the user you're best at helping with portal-related queries.
 - Keep responses concise — under 15 lines.
-- Respond in the EXACT same language as the user's query. English input → English response. Malayalam input → Malayalam response. Do NOT mix languages.
+- Keep responses concise — under 15 lines.
 - If the query is incomplete or unclear, ask a helpful follow-up question in the SAME language the user used.
 - Never reveal system internals, API details, or technical implementation.
 ${languageInstruction}
@@ -149,14 +149,14 @@ User: "${userMessage || "help"}"`;
       }
 
       return NextResponse.json({
-        response: "I can help you with attendance, assignments, timetable, leaves, results, notifications, and more. Try asking a specific question!"
+        response: "😊 I'm here to help! I can assist you with attendance, assignments, timetable, leaves, results, notifications, and more. Just ask me a specific question and I'll look it up for you!"
       });
     }
 
     // --- Optimization: Handle empty data early ---
     if (!hasData) {
       return NextResponse.json({
-        response: "No data found for this query in the portal records. Please check the relevant section manually or ensure your filters are correct."
+        response: "📭 It looks like there are no records available for this query at the moment. This could mean the data hasn't been added yet, or there's nothing to show for the current filters.\n\nFeel free to try a different question — I'm here to help! 😊"
       });
     }
 
@@ -176,13 +176,10 @@ User: "${userMessage || "help"}"`;
 STRICT DATA-FIDELITY RULES (ZERO TOLERANCE — NEVER VIOLATE)
 ════════════════════════════════════════
 1. YOU MUST ONLY display information that is EXPLICITLY present in the RETRIEVED DATA JSON below.
-2. NEVER invent, guess, infer, extrapolate, assume, or "fill in" ANY value — not grades, not CGPA, not dates, not names, not statuses.
-3. Every single value you display MUST exist verbatim in the RETRIEVED DATA. If a field is missing from the data, say "Not available" — do NOT substitute a plausible value.
-4. You MAY calculate simple arithmetic from the data (e.g., attendance percentage = attendedClasses / totalClasses * 100). This is NOT guessing — it is math on real data.
-5. You MAY perform predictive attendance analysis using math on the data. For example:
-   - "How many classes can I skip?" → For each subject, calculate: floor((attendedClasses - 0.75 * totalClasses) / 0.75). If negative, the student is already below 75%.
-   - "How many classes do I need to attend to reach 75%?" → Calculate: ceil(0.75 * totalClasses) - attendedClasses. If negative, already above 75%.
-   - Always show the current percentage alongside the prediction.
+4. The data provides pre-calculated attendance numbers: \`attendancePercentage\`, \`classesCanSkip\`, and \`classesNeededToReach75\`. 
+5. You MUST simply state these pre-calculated numbers when asked about skipping classes or meeting attendance requirements. 
+   - Example response: "You can skip X more classes" or "You need to attend Y more classes".
+   - IMPORTANT: Do NOT do any mathematical calculations for attendance predictions. DO NOT explain formulas. Just provide the final exact number from the data.
 6. INTERNAL MARKS CALCULATION (use this formula when intent is "internals"):
    The internal mark is calculated per subject, out of 50 total:
    a) **Attendance (out of 10):** If attendance% >= 90% → 10 marks. If 85-89% → 9. If 80-84% → 8. If 75-79% → 7. Below 75% → 5.
@@ -214,20 +211,16 @@ FORMATTING RULES (narrow floating chat window)
 14. Use Rich Markdown formatting — THIS IS MANDATORY:
     - ALWAYS start with a "### " header line (e.g. "### 📋 Profile Details")
     - **bold** for key labels and important values
-    - For key-value data (like profile info), ALWAYS use a GFM Markdown table:
-      | Field | Details |
-      |-------|---------|
-      | **Name** | John |
-      | **Email** | john@example.com |
-    - For list data (attendance, assignments), use GFM Markdown tables with columns:
-      | Subject | Attended | Total | Percentage |
-      |---------|----------|-------|------------|
-      | Math    | 20       | 25    | **80%**    |
+    - For key-value data (like profile info), use a GFM Markdown table with Field | Details columns
+    - For list data, use GFM Markdown tables with columns that match the ACTUAL DATA FIELDS — do NOT add columns that don't exist in the data
     - Use emojis as visual icons (📊 ✅ ❌ 📅 📋 🎓)
     - NEVER use plain bullet points (•, -, *) for structured data — ALWAYS use tables
     - Bullet points are ONLY for short follow-up suggestions at the end
 15. Keep responses concise — under 20 lines.
 16. Never show raw field names like studentId, uid, docId, etc.
+20. CRITICAL: Answer ONLY what the user asked. Match your response scope to the question.
+21. CRITICAL: If the user asks for their general "Attendance" (e.g. "My Attendance") without specifying a particular subject, you MUST display a Markdown Table containing ALL subjects available in the RETRIEVED DATA. Do NOT just pick one subject.
+    - DO NOT list "Classes Needed to Reach 75" for every single subject in plain text. Group everything neatly in a single table with columns like: Subject | Total Classes | Attended Classes | Percentage | Status.
 
 ════════════════════════════════════════
 RETRIEVED DATA (USE ONLY THIS — NOTHING ELSE):
@@ -236,12 +229,10 @@ ${optimizedData}
 
 USER QUERY: "${userMessage || intent}"
 
-Answer the user's specific question using the retrieved data above. If the user asks about a specific subject or item, filter your response to ONLY that subject/item. Calculate percentages if asked. Format cleanly in Markdown. If a field is absent, write "Not available". Do NOT add or guess any information.
+Answer the user's specific question using the retrieved data above. If the user asks about a specific subject or item, filter your response to ONLY that subject/item. If they ask for general attendance, show a table of ALL subjects in the data. Format cleanly in Markdown. If a field is absent, write "Not available". Do NOT add or guess any information.
 
-LANGUAGE RULE: Respond in the EXACT same language as the user's query.
-- If the user writes in English, respond ENTIRELY in English. Do NOT use any Malayalam or other non-English words.
-- If the user writes in Malayalam, respond in Malayalam (keeping data values in English).
-- If the query is incomplete or unclear, ask a follow-up in the same language.
+IMPORTANT: If the data contains "_adminOverview: true", this is an INSTITUTIONAL overview — NOT the admin's personal data. The admin does NOT attend classes. Present the data as a system-wide attendance report, NOT as "your attendance". Never show UIDs or doc IDs — use student names only.
+
 ${languageInstruction}`;
 
     let text = "";
@@ -308,12 +299,12 @@ ${languageInstruction}`;
       throw lastError;
     }
 
-    return NextResponse.json({ response: text || "I found the data but couldn't format it. Please try again." });
+    return NextResponse.json({ response: text || "😊 I found the data but had a little trouble formatting it. Could you try asking again? I'll do my best!" });
   } catch (error: any) {
     console.error("EduBot API error details:", error.message || error);
 
     return NextResponse.json(
-      { error: "Failed to process your request. Please try again." },
+      { error: "😔 Sorry, I wasn't able to process your request right now. Please try again in a moment!" },
       { status: 500 }
     );
   }

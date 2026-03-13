@@ -18,9 +18,19 @@ const ROLES_CONFIG = {
     modules: ["All"],
     color: "bg-red-100 text-red-800",
   },
+  Director: {
+    permissions: ["All Permissions", "Final Leave Approval", "Policy Management"],
+    modules: ["All"],
+    color: "bg-rose-100 text-rose-800",
+  },
+  Principal: {
+    permissions: ["Leave Approval", "Faculty Oversight", "Academic Management", "Reports"],
+    modules: ["Dashboard", "Faculty", "Department", "Students", "Reports", "Leave Approvals"],
+    color: "bg-indigo-100 text-indigo-800",
+  },
   HOD: {
-    permissions: ["Dept Management", "Faculty Oversight", "Reports"],
-    modules: ["Dashboard", "Department", "Faculty", "Students", "Reports"],
+    permissions: ["Dept Management", "Faculty Oversight", "Leave Recommendation", "Reports"],
+    modules: ["Dashboard", "Department", "Faculty", "Students", "Reports", "Leave Approvals"],
     color: "bg-purple-100 text-purple-800",
   },
   Coordinator: {

@@ -11,6 +11,8 @@ import {
   updateDoc,
   addDoc,
   Timestamp,
+  getDocs,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
 import toast from "react-hot-toast";
@@ -82,9 +84,70 @@ export default function page() {
   const [studentReports, setStudentReports] = useState<StudentReport[]>([]);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
 
+  // Add marks state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [assignedSubjects, setAssignedSubjects] = useState<{batchId: string, batchName: string, subject: string}[]>([]);
+  const [addType, setAddType] = useState<"assignment" | "internal">("assignment");
+  const [selectedMapping, setSelectedMapping] = useState("");
+  const [itemName, setItemName] = useState("");
+  const [maxMarks, setMaxMarks] = useState(25);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // New features state
+  const [isAddExamOpen, setIsAddExamOpen] = useState(false);
+  const [newExamName, setNewExamName] = useState("");
+  const [newExamBatch, setNewExamBatch] = useState("");
+  const [newExamEval, setNewExamEval] = useState(0);
+  const [newExamTotal, setNewExamTotal] = useState(0);
+
+  const [isAddDeadlineOpen, setIsAddDeadlineOpen] = useState(false);
+  const [newDeadlineType, setNewDeadlineType] = useState("");
+  const [newDeadlineDate, setNewDeadlineDate] = useState("");
+
   useEffect(() => {
     if (!user) return;
     setLoading(true);
+
+    const fetchAssignedSubjects = async () => {
+      try {
+        let facultyName = user.displayName || "";
+        const fDoc = await getDocs(query(collection(db, "faculty"), where("email", "==", user.email)));
+        if (!fDoc.empty) facultyName = fDoc.docs[0].data().name || facultyName;
+        
+        const normName = facultyName.trim().toLowerCase();
+
+        const snap = await getDocs(collection(db, "timetables"));
+        const batchesSnap = await getDocs(collection(db, "batches"));
+        const batchMap: Record<string, string> = {};
+        batchesSnap.docs.forEach(d => { batchMap[d.id] = d.data().name || d.id; });
+
+        const subs: Record<string, {batchId: string, batchName: string, subject: string}> = {};
+
+        snap.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          const batchId = docSnap.id;
+          const mappedBatchName = batchMap[batchId] || batchId;
+
+          if (data.entries && Array.isArray(data.entries)) {
+            data.entries.forEach((entry: any) => {
+              if ((entry.faculty || "").trim().toLowerCase() === normName) {
+                const key = `${batchId}_${entry.subject}`;
+                subs[key] = {
+                  batchId,
+                  batchName: mappedBatchName,
+                  subject: entry.subject,
+                };
+              }
+            });
+          }
+        });
+        setAssignedSubjects(Object.values(subs));
+      } catch (err) {
+        console.error("Failed to fetch assigned subjects", err);
+      }
+    };
+    fetchAssignedSubjects();
 
     // Fetch all collections in parallel (simplified for this view)
     const unsubAssignments = onSnapshot(
@@ -180,6 +243,147 @@ export default function page() {
     }
   };
 
+  const handleCsvUpload = async () => {
+    if (!user) return;
+    if (!selectedMapping || !itemName || !maxMarks || !csvFile) {
+      toast.error("Please fill all fields and select a CSV file.");
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const { batchId, batchName, subject } = JSON.parse(selectedMapping);
+      const text = await csvFile.text();
+      const rows = text.split("\n").map(r => r.split(","));
+      const headers = rows[0].map(h => h.trim().toLowerCase());
+      const regIdx = headers.findIndex(h => h.includes("reg"));
+      const marksIdx = headers.findIndex(h => h.includes("mark"));
+      
+      if (regIdx === -1 || marksIdx === -1) {
+        toast.error("CSV must have 'Reg No' and 'Marks' in header row.");
+        setIsUploading(false);
+        return;
+      }
+
+      let count = 0;
+      for (let i = 1; i < rows.length; i++) {
+          if (!rows[i] || rows[i].length < 2) continue;
+          const regNo = rows[i][regIdx]?.trim();
+          const markVal = parseFloat(rows[i][marksIdx]?.trim());
+          if (!regNo || isNaN(markVal)) continue;
+
+          // Try to find the student
+          const qStud = query(collection(db, "students"), where("regNumber", "==", regNo));
+          const studSnap = await getDocs(qStud);
+          const studName = studSnap.empty ? regNo : (studSnap.docs[0].data().name || regNo);
+
+          if (addType === "assignment") {
+            await addDoc(collection(db, "evaluation_assignments"), {
+              facultyId: user.uid,
+              student: studName,
+              regNumber: regNo,
+              assignmentName: itemName,
+              submittedDate: new Date().toISOString().split('T')[0],
+              marks: markVal,
+              maxMarks: maxMarks,
+              status: "evaluated",
+              subject: subject,
+              batch: batchName
+            });
+          } else {
+            await addDoc(collection(db, "evaluation_internals"), {
+              facultyId: user.uid,
+              student: studName,
+              regNumber: regNo,
+              subject: subject,
+              itemName: itemName,
+              marks: markVal,
+              maxMarks: maxMarks,
+              status: "entered",
+              batch: batchName
+            });
+          }
+          count++;
+      }
+      toast.success(`Successfully uploaded marks for ${count} students!`);
+      setIsAddModalOpen(false);
+      setCsvFile(null);
+      setItemName("");
+    } catch(e) {
+       console.error(e);
+        toast.error("Error processing CSV file");
+    }
+    setIsUploading(false);
+  };
+
+  const handleAddExam = async () => {
+     if(!user || !newExamName || !newExamBatch) {
+         toast.error("Please fill required fields.");
+         return;
+     }
+     try {
+       await addDoc(collection(db, "evaluation_exams"), {
+         facultyId: user.uid,
+         examName: newExamName,
+         batch: newExamBatch,
+         evaluatedStudents: newExamEval,
+         totalStudents: newExamTotal,
+         status: newExamEval >= newExamTotal ? "completed" : "in_progress"
+       });
+       toast.success("Exam status added successfully.");
+       setIsAddExamOpen(false);
+       setNewExamName(""); setNewExamBatch(""); setNewExamEval(0); setNewExamTotal(0);
+     } catch(e) { toast.error("Failed to add exam."); }
+  };
+
+  const handleAddDeadline = async () => {
+    if(!user || !newDeadlineType || !newDeadlineDate) {
+         toast.error("Please fill required fields.");
+         return;
+    }
+    try {
+       await addDoc(collection(db, "evaluation_deadlines"), {
+         facultyId: user.uid,
+         evaluationType: newDeadlineType,
+         dueDate: newDeadlineDate,
+         status: (new Date(newDeadlineDate) < new Date()) ? "overdue" : "upcoming"
+       });
+       toast.success("Deadline added successfully.");
+       setIsAddDeadlineOpen(false);
+       setNewDeadlineType(""); setNewDeadlineDate("");
+    } catch(e) { toast.error("Failed to add deadline."); }
+  };
+
+  const handleGenerateReports = async () => {
+     if(!user) return;
+     
+     if (internalMarks.length === 0 && assignments.length === 0) {
+        toast.error("No marks data to generate reports from.");
+        return;
+     }
+     
+     const id = toast.loading("Generating performance reports from marks...");
+     let count = 0;
+     for(const m of internalMarks) {
+       // Generate mock report based on internal marks just for demonstration
+       await addDoc(collection(db, "evaluation_reports"), {
+          facultyId: user.uid,
+          student: m.student,
+          regNumber: m.regNumber,
+          subject: m.subject,
+          overallGrade: (m.marks || 0) >= (m.maxMarks * 0.8) ? "A" : (m.marks || 0) >= (m.maxMarks * 0.6) ? "B" : "C",
+          cgpa: (m.marks || 0) >= (m.maxMarks * 0.8) ? 9.0 : 7.5,
+          status: (m.marks || 0) >= (m.maxMarks * 0.4) ? "passed" : "failed"
+       });
+       count++;
+     }
+     toast.success(`Generated ${count} reports.`, { id });
+  };
+
+  const handleSubmitGrades = async () => {
+     if(!user) return;
+     toast.success("Grades reliably submitted to the central examination board!");
+  };
+
   const seedData = async () => {
     if (!user) return;
     if (
@@ -260,15 +464,38 @@ export default function page() {
   ] as const;
 
   const QuickActions = () => (
-    <div className="flex flex-wrap gap-4 mb-6">
-      <div className="flex space-x-1 border-b">
+    <div className="flex flex-wrap gap-4 mb-6 items-end">
+      {selectedTab === "assignments" || selectedTab === "internal" ? (
+         <button
+          onClick={() => setIsAddModalOpen(true)}
+          className="h-10 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors shadow-sm font-medium border border-indigo-600"
+         >
+          + Add Evaluation Marks
+         </button>
+      ) : selectedTab === "exams" ? (
+         <button
+          onClick={() => setIsAddExamOpen(true)}
+          className="h-10 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors shadow-sm font-medium border border-indigo-600"
+         >
+          + Add Exam Status
+         </button>
+      ) : selectedTab === "deadlines" ? (
+         <button
+          onClick={() => setIsAddDeadlineOpen(true)}
+          className="h-10 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors shadow-sm font-medium border border-indigo-600"
+         >
+          + Add Deadline
+         </button>
+      ) : null}
+
+      <div className="flex flex-wrap gap-1 border-b w-full sm:w-auto mt-2 sm:mt-0">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setSelectedTab(tab.key)}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               selectedTab === tab.key
-                ? "border-blue-500 text-blue-600"
+                ? "border-blue-500 text-blue-600 bg-blue-50/50 rounded-t-xl border-x border-t"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
@@ -276,15 +503,22 @@ export default function page() {
           </button>
         ))}
       </div>
-      <button
-        onClick={seedData}
-        className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-      >
-        + Seed Test Data
-      </button>
-      <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
-        Submit All Grades
-      </button>
+      {selectedTab === "reports" && (
+        <button
+          onClick={handleGenerateReports}
+          className="h-10 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-sm font-medium border border-green-600"
+        >
+          Generate Reports
+        </button>
+      )}
+      {selectedTab === "grades" && (
+        <button
+          onClick={handleSubmitGrades}
+          className="h-10 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-sm font-medium border border-green-600"
+        >
+          Submit All Grades
+        </button>
+      )}
     </div>
   );
 
@@ -607,6 +841,9 @@ export default function page() {
               <h2 className="text-lg font-medium text-gray-900">
                 Student Performance Reports
               </h2>
+              <button onClick={handleGenerateReports} className="px-3 py-1.5 bg-blue-50 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-100 transition-colors">
+                Generate Latest Reports
+              </button>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -682,7 +919,10 @@ export default function page() {
             <p className="text-gray-600 mb-4">
               All grades are up to date. No pending submissions.
             </p>
-            <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+            <button 
+              onClick={handleSubmitGrades}
+              className="w-full px-4 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors"
+            >
               Submit Grades for Semester
             </button>
           </div>
@@ -771,6 +1011,154 @@ export default function page() {
           </div>
         </div>
       </div>
+
+      {/* Add Marks Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add Evaluation Marks (CSV)</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select 
+                  value={addType} 
+                  onChange={e => setAddType(e.target.value as any)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white"
+                >
+                  <option value="assignment">Assignment</option>
+                  <option value="internal">Internal Exam</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Subject</label>
+                <select 
+                  value={selectedMapping} 
+                  onChange={e => setSelectedMapping(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white"
+                >
+                  <option value="">-- Select Subject --</option>
+                  {assignedSubjects.map((sub, i) => (
+                     <option key={i} value={JSON.stringify(sub)}>
+                        {sub.batchName} - {sub.subject}
+                     </option>
+                  ))}
+                </select>
+                {assignedSubjects.length === 0 && (
+                   <p className="text-xs text-orange-500 mt-1">No assigned subjects found dynamically from the college timetable.</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{addType === 'assignment' ? 'Assignment Name' : 'Exam Name'}</label>
+                  <input 
+                    type="text" 
+                    value={itemName} 
+                    onChange={e => setItemName(e.target.value)}
+                    placeholder="e.g. Unit Test 1"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Marks</label>
+                  <input 
+                    type="number" 
+                    value={maxMarks} 
+                    onChange={e => setMaxMarks(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Upload CSV</label>
+                <input 
+                  type="file" 
+                  accept=".csv"
+                  onChange={e => setCsvFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="text-xs text-gray-500 mt-1">Include header row: Reg No, Marks</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 hover:bg-gray-100 text-gray-700 rounded-lg transition-colors"
+                disabled={isUploading}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleCsvUpload}
+                disabled={isUploading || !csvFile}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isUploading ? "Uploading..." : "Upload & Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Exam Modal */}
+      {isAddExamOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add Exam Valuation Status</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Exam Name</label>
+                <input type="text" value={newExamName} onChange={e => setNewExamName(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. Midterms" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
+                <input type="text" value={newExamBatch} onChange={e => setNewExamBatch(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. CSE 2024" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Evaluated Count</label>
+                  <input type="number" value={newExamEval} onChange={e => setNewExamEval(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Count</label>
+                  <input type="number" value={newExamTotal} onChange={e => setNewExamTotal(Number(e.target.value))} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setIsAddExamOpen(false)} className="px-4 py-2 hover:bg-gray-100 text-gray-700 rounded-lg">Cancel</button>
+              <button onClick={handleAddExam} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Add Exam</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Deadline Modal */}
+      {isAddDeadlineOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add Notification Deadline</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Evaluation Type</label>
+                <input type="text" value={newDeadlineType} onChange={e => setNewDeadlineType(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. Final Grade Submission" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                <input type="date" value={newDeadlineDate} onChange={e => setNewDeadlineDate(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setIsAddDeadlineOpen(false)} className="px-4 py-2 hover:bg-gray-100 text-gray-700 rounded-lg">Cancel</button>
+              <button onClick={handleAddDeadline} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Add Deadline</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

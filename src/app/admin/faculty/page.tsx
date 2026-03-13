@@ -230,6 +230,19 @@ export default function FacultyPage() {
           current: "",
         });
 
+        // Determine next CCET/FAC/XXX number from existing faculty
+        const facultySnapshot = await getDocs(collection(db, "faculty"));
+        let maxFacNum = 0;
+        facultySnapshot.docs.forEach(d => {
+            const uid = d.data().uid || '';
+            const match = uid.match(/CCET\/FAC\/(\d+)/);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (num > maxFacNum) maxFacNum = num;
+            }
+        });
+        let nextFacNum = maxFacNum + 1;
+
         let successCount = 0;
 
         for (const row of data) {
@@ -283,7 +296,7 @@ export default function FacultyPage() {
             // 2. Create faculty document (ID = Auth UID)
             await setDoc(doc(db, "faculty", authUid), {
               name,
-              uid: uid || `FAC-${authUid.slice(0, 6).toUpperCase()}`,
+              uid: uid || `CCET/FAC/${String(nextFacNum++).padStart(3, '0')}`,
               email,
               phone,
               department: facultyDept,
@@ -301,7 +314,7 @@ export default function FacultyPage() {
               createdAt: new Date().toISOString(),
               read: false,
               type: "info",
-              audience: ["admin", "faculty"],
+              audience: ["admin"],
             });
 
             successCount++;
@@ -347,6 +360,14 @@ export default function FacultyPage() {
         return "bg-purple-100 text-purple-800";
       case "HOD":
         return "bg-orange-100 text-orange-800";
+      case "Director":
+        return "bg-rose-100 text-rose-800";
+      case "Principal":
+        return "bg-indigo-100 text-indigo-800";
+      case "Bursar":
+        return "bg-teal-100 text-teal-800";
+      case "Super Admin":
+        return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -985,13 +1006,13 @@ export default function FacultyPage() {
                     },
                     {
                       col: "Role",
-                      desc: "(Optional) Faculty / Tutor / Coordinator / HOD",
+                      desc: "(Optional) Faculty / Tutor / Coordinator / HOD / Director / Principal / Bursar / Super Admin",
                       highlight: false,
                       opt: true,
                     },
                     {
                       col: "UID",
-                      desc: "(Optional) Faculty ID e.g. FAC-001 (auto-generated if blank)",
+                      desc: "(Optional) Auto-assigned in CCET/FAC/XXX format if blank",
                       highlight: false,
                       opt: true,
                     },

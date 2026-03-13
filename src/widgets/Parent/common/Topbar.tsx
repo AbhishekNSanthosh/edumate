@@ -43,31 +43,43 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
     return () => unsub();
   }, [user]);
 
-  // Fetch Notifications (Student specific query as requested)
+  // Fetch Notifications (Parent-specific + personalized)
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
+    const roleQ = query(
       collection(db, "notifications"),
-      where("audience", "array-contains", "student"),
+      where("audience", "array-contains", "parent"),
+      limit(20),
+    );
+    const personalQ = query(
+      collection(db, "notifications"),
+      where("targetUid", "==", user.uid),
       limit(20),
     );
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-      // Client-side sort
+    const notifMap = new Map<string, any>();
+    const updateList = () => {
+      const items = Array.from(notifMap.values());
       items.sort((a: any, b: any) => {
-        const tA = a.createdAt?.seconds || 0;
-        const tB = b.createdAt?.seconds || 0;
+        const tA = a.createdAt?.seconds || new Date(a.createdAt || 0).getTime() / 1000;
+        const tB = b.createdAt?.seconds || new Date(b.createdAt || 0).getTime() / 1000;
         return tB - tA;
       });
-
       setNotifications(items);
-      setUnreadCount(items.length);
+      setUnreadCount(items.filter((n: any) => !n.read).length);
+    };
+
+    const unsub1 = onSnapshot(roleQ, (snapshot) => {
+      snapshot.docs.forEach((d) => notifMap.set(d.id, { id: d.id, ...d.data() }));
+      updateList();
+    });
+    const unsub2 = onSnapshot(personalQ, (snapshot) => {
+      snapshot.docs.forEach((d) => notifMap.set(d.id, { id: d.id, ...d.data() }));
+      updateList();
     });
 
-    return () => unsub();
+    return () => { unsub1(); unsub2(); };
   }, [user]);
 
   // Handle click outside to close dropdown

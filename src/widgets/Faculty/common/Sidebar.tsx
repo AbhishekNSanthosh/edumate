@@ -7,23 +7,64 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import { FiLogOut, FiMenu, FiX } from "react-icons/fi";
-import { auth } from "../../../config/firebaseConfig";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { auth, db } from "../../../config/firebaseConfig";
+import { useAuth } from "../../../context/AuthContext";
 import toast from "react-hot-toast";
 
 export default function Sidebar() {
+  const { user } = useAuth();
   const userRole = "faculty";
   const pathname = usePathname();
   const router = useRouter();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isTutor, setIsTutor] = useState<boolean | null>(null);
 
   // Extract role from the URL path (e.g., /admin/dashboard -> "admin")
   const pathRole = pathname?.split("/")[1] || userRole;
 
   // Filter menu items based on role
-  const filteredMenu = facultySideBarMenu.filter((item) =>
+  let filteredMenu = facultySideBarMenu.filter((item) =>
     item.rightsToView.includes(userRole)
   );
+
+  if (isTutor === false) {
+     filteredMenu = filteredMenu.filter(m => m.link !== "my-batch");
+  }
+
+  useEffect(() => {
+    const checkTutorStatus = async () => {
+      if (!user) return;
+      try {
+        let facultyDoc = (await getDocs(query(collection(db, "faculty"), where("authUid", "==", user.uid)))).docs[0];
+        if (!facultyDoc) {
+          facultyDoc = (await getDocs(query(collection(db, "faculty"), where("email", "==", user.email)))).docs[0];
+        }
+        if (!facultyDoc) { setIsTutor(false); return; }
+
+        const fName = facultyDoc.data().name || user.displayName || "";
+        const fDocId = facultyDoc.id;
+
+        const allBatches = await getDocs(collection(db, "batches"));
+        const tutorBatch = allBatches.docs.find(d => {
+          const b = d.data();
+          return (
+            b.tutor === fName ||
+            b.tutorId === user.uid ||
+            b.tutorId === fDocId ||
+            (Array.isArray(b.tutors) && b.tutors.some((t: any) => t.id === fDocId || t.name === fName))
+          );
+        });
+
+        setIsTutor(!!tutorBatch);
+      } catch (err) {
+        console.error("Tutor check error:", err);
+        setIsTutor(false);
+      }
+    };
+    checkTutorStatus();
+  }, [user]);
 
   // Close mobile sidebar on route change
   useEffect(() => {

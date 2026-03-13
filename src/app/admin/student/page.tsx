@@ -171,10 +171,22 @@ export default function StudentPage() {
 
   // ── Individual Delete ──
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this student?")) return;
+    if (!confirm("Are you sure you want to delete this student? This will also remove their login account.")) return;
     try {
+      // 1. Delete Firebase Auth account (id == uid for students created via bulk upload)
+      await fetch("/api/delete-student-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: id }),
+      });
+
+      // 2. Delete Firestore student doc
       await deleteDoc(doc(db, "students", id));
-      toast.success("Student deleted successfully");
+
+      // 3. Delete the parent doc that was auto-created on upload
+      try { await deleteDoc(doc(db, "parents", id)); } catch { /* might not exist */ }
+
+      toast.success("Student and account deleted successfully");
       setStudents((prev) => prev.filter((s) => s.id !== id));
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -191,16 +203,36 @@ export default function StudentPage() {
   const handleBulkDelete = async () => {
     setBulkDeleteLoading(true);
     try {
-      const batch = writeBatch(db);
-      selectedIds.forEach((id) => batch.delete(doc(db, "students", id)));
-      await batch.commit();
-      const count = selectedIds.size;
+      const ids = Array.from(selectedIds);
+
+      // 1. Delete all Firebase Auth accounts in parallel
+      await Promise.all(
+        ids.map((id) =>
+          fetch("/api/delete-student-account", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uid: id }),
+          }).catch(() => { /* ignore individual auth-delete errors */ })
+        )
+      );
+
+      // 2. Delete Firestore student + parent docs in batches (Firestore max 500/batch)
+      const batchSize = 450;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const chunk = ids.slice(i, i + batchSize);
+        const firestoreBatch = writeBatch(db);
+        chunk.forEach((id) => {
+          firestoreBatch.delete(doc(db, "students", id));
+          firestoreBatch.delete(doc(db, "parents", id));
+        });
+        await firestoreBatch.commit();
+      }
+
+      const count = ids.length;
       setStudents((prev) => prev.filter((s) => !selectedIds.has(s.id)));
       setSelectedIds(new Set());
       setShowDeleteConfirm(false);
-      toast.success(
-        `${count} student${count > 1 ? "s" : ""} deleted successfully`,
-      );
+      toast.success(`${count} student${count > 1 ? "s" : ""} deleted successfully`);
     } catch (error) {
       console.error(error);
       toast.error("Failed to delete selected students");

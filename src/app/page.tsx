@@ -82,7 +82,7 @@ export default function Home() {
         <div className="text-sm text-gray-500">
           <p>
             Need help?{' '}
-            <button className="text-[#1f75fe] font-medium hover:underline">Contact support</button>
+            <Link href="/contact" className="text-[#1f75fe] font-medium hover:underline">Contact support</Link>
           </p>
         </div>
       </div>

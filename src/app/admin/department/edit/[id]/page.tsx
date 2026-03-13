@@ -137,7 +137,7 @@ export default function EditDepartment() {
     );
 
   return (
-    <div className="mt-[100px] p-6 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Edit Department</h1>

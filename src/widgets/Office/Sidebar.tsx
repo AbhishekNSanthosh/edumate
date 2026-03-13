@@ -1,0 +1,180 @@
+"use client";
+
+import { officeSideBarMenu } from "@utils/constants";
+import { signOut } from "firebase/auth";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import React from "react";
+import { FiLogOut, FiX } from "react-icons/fi";
+import { auth } from "../../config/firebaseConfig";
+import toast from "react-hot-toast";
+
+interface SidebarProps {
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export default function Sidebar({
+  isMobileOpen = false,
+  onMobileClose,
+}: SidebarProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
+
+  const filteredMenu = officeSideBarMenu.filter((item) =>
+    item.rightsToView.includes("office"),
+  );
+
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      await signOut(auth);
+      toast.success("Logged out successfully");
+      router.push("/office-login");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Logout failed");
+    } finally {
+      setShowLogoutConfirm(false);
+    }
+  };
+
+  const handleLinkClick = () => {
+    if (onMobileClose) {
+      onMobileClose();
+    }
+  };
+
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`
+        fixed left-0 top-0 h-screen flex flex-col bg-white border-r border-gray-100 z-50 transition-transform duration-300 ease-in-out
+        ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
+        lg:translate-x-0 lg:w-[17vw]
+        w-72 sm:w-80
+      `}
+      >
+        {/* Logo & Close Button */}
+        <div className="py-4 sm:py-6 px-4 sm:px-6 border-b border-gray-50 bg-gradient-to-r from-blue-50/50 to-transparent flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Image
+              src="/brand/logo.svg"
+              alt="logo"
+              width={100}
+              height={40}
+              className="h-7 sm:h-8 w-auto"
+              priority
+            />
+            <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+              OFFICE
+            </span>
+          </div>
+          <button
+            onClick={onMobileClose}
+            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Close menu"
+          >
+            <FiX className="text-xl text-gray-600" />
+          </button>
+        </div>
+
+        {/* Menu Items */}
+        <div className="flex-1 mt-4 sm:mt-6 space-y-1.5 overflow-y-auto sidebarScroll px-3">
+          {filteredMenu.map((menu) => {
+            const menuPath = `/office/${menu.link}`;
+            const isActive = pathname === menuPath;
+
+            return (
+              <Link
+                key={menu.link}
+                href={menuPath}
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 h-11 sm:h-12 px-3 sm:px-4 relative rounded-xl transition-all duration-200 group
+                  ${
+                    isActive
+                      ? "bg-blue-50 text-blue-600 font-semibold"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  }
+                `}
+              >
+                {isActive && (
+                  <div className="w-1 h-6 bg-blue-600 absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full"></div>
+                )}
+
+                <menu.icon
+                  className={`text-lg sm:text-xl transition-colors flex-shrink-0 ${
+                    isActive
+                      ? "text-blue-600"
+                      : "text-gray-400 group-hover:text-gray-600"
+                  }`}
+                />
+
+                <span className="truncate text-sm">{menu.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Logout Button */}
+        <div className="p-3 sm:p-4 border-t border-gray-100 bg-gray-50/50">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all duration-200 text-sm font-medium group"
+          >
+            <FiLogOut className="text-lg text-gray-400 group-hover:text-red-500 transition-colors" />
+            <span className="hidden sm:inline">Logout</span>
+            <span className="sm:hidden">Sign Out</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <FiLogOut className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                Confirm Logout
+              </h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Are you sure you want to end your current session?
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Yes, Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
