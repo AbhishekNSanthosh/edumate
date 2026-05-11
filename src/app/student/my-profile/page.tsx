@@ -183,7 +183,7 @@ export default function ProfileSettings() {
 
   const inputCls = "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition bg-white";
   const disabledCls = "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-400 cursor-not-allowed";
-  const sectionCls = "bg-white rounded-xl border border-gray-200 p-6";
+  const sectionCls = "bg-white rounded-lg border border-gray-200 p-6";
 
   if (loading) {
     return (
@@ -192,15 +192,15 @@ export default function ProfileSettings() {
         <div className="h-4 w-64 bg-gray-100 rounded mb-8" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col items-center">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 flex flex-col items-center">
               <div className="w-28 h-28 bg-gray-200 rounded-full mb-4" />
               <div className="h-5 w-32 bg-gray-200 rounded mb-2" />
               <div className="h-3 w-40 bg-gray-100 rounded" />
             </div>
           </div>
           <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 h-48" />
-            <div className="bg-white rounded-xl border border-gray-200 h-56" />
+            <div className="bg-white rounded-lg border border-gray-200 h-48" />
+            <div className="bg-white rounded-lg border border-gray-200 h-56" />
           </div>
         </div>
       </div>

@@ -280,7 +280,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Device History / Active Sessions */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-50 rounded-lg text-green-600 border border-green-100">
@@ -375,7 +375,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Security Section */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center gap-3">
             <div className="p-2 bg-blue-50 rounded-lg text-blue-600 border border-blue-100">
               <FiLock size={20} />
@@ -439,7 +439,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Preferences Section */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center gap-3">
             <div className="p-2 bg-purple-50 rounded-lg text-purple-600 border border-purple-100">
               <FiGlobe size={20} />

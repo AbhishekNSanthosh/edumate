@@ -127,7 +127,7 @@ User: "${userMessage || "help"}"`;
               { role: "user", content: userMessage || "help" },
             ],
             stream: false,
-            options: { temperature: 0.3, num_predict: 400 },
+            options: { temperature: 0.3, num_predict: isMalayalam ? 700 : 400 },
           }),
         });
 
@@ -156,7 +156,9 @@ User: "${userMessage || "help"}"`;
     // --- Optimization: Handle empty data early ---
     if (!hasData) {
       return NextResponse.json({
-        response: "📭 It looks like there are no records available for this query at the moment. This could mean the data hasn't been added yet, or there's nothing to show for the current filters.\n\nFeel free to try a different question — I'm here to help! 😊"
+        response: isMalayalam
+          ? "📭 ഈ ചോദ്യത്തിനുള്ള ഡാറ്റ ഇപ്പോൾ ലഭ്യമല്ല. ഡാറ്റ ഇതുവരെ ചേർക്കിയിട്ടില്ലായിരിക്കും, അല്ലെങ്കിൽ നിലവിൽ കാണിക്കാൻ ഒന്നുമില്ല.\n\nമറ്റൊരു ചോദ്യം ശ്രമിക്കൂ — ഞാൻ സഹായിക്കാം! 😊"
+          : "📭 It looks like there are no records available for this query at the moment. This could mean the data hasn't been added yet, or there's nothing to show for the current filters.\n\nFeel free to try a different question — I'm here to help! 😊"
       });
     }
 
@@ -232,6 +234,7 @@ USER QUERY: "${userMessage || intent}"
 Answer the user's specific question using the retrieved data above. If the user asks about a specific subject or item, filter your response to ONLY that subject/item. If they ask for general attendance, show a table of ALL subjects in the data. Format cleanly in Markdown. If a field is absent, write "Not available". Do NOT add or guess any information.
 
 IMPORTANT: If the data contains "_adminOverview: true", this is an INSTITUTIONAL overview — NOT the admin's personal data. The admin does NOT attend classes. Present the data as a system-wide attendance report, NOT as "your attendance". Never show UIDs or doc IDs — use student names only.
+IMPORTANT: If the data contains a "child" key (parent role profile), present the "child" section as "### 👤 Student Profile" and the "parent" section as "### 👨‍👩‍👦 Parent Contact". Never label the child's section as "parent" or vice versa.
 
 ${languageInstruction}`;
 
@@ -265,7 +268,8 @@ ${languageInstruction}`;
           stream: false,
           options: {
             temperature: 0.1,
-            num_predict: 500,
+            // Malayalam script needs more tokens per word — increase budget to prevent truncation
+            num_predict: isMalayalam ? 900 : 500,
           }
         }),
       });
@@ -299,7 +303,11 @@ ${languageInstruction}`;
       throw lastError;
     }
 
-    return NextResponse.json({ response: text || "😊 I found the data but had a little trouble formatting it. Could you try asking again? I'll do my best!" });
+    return NextResponse.json({
+      response: text || (isMalayalam
+        ? "😊 ഡാറ്റ കണ്ടെത്തി, പക്ഷേ ഫോർമാറ്റ് ചെയ്യാൻ ബുദ്ധിമുട്ടുണ്ടായി. ദയവായി വീണ്ടും ചോദിക്കൂ!"
+        : "😊 I found the data but had a little trouble formatting it. Could you try asking again? I'll do my best!")
+    });
   } catch (error: any) {
     console.error("EduBot API error details:", error.message || error);
 

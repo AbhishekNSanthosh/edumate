@@ -73,13 +73,13 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "maintain attendance",
     "75%",
     "shortage",
-    // Malayalam / Manglish
-    "ഹാജർ",
-    "hajr",
-    "haazir",
-    "class poyi",
-    "class poyilla",
-    "ethra class",
+    // Malayalam script
+    "ഹാജർ", "ഹാജരാകൽ", "ഹാജർ ശതമാനം", "ഹാജർ കുറവ്", "ഹാജർ റിപ്പോർട്ട്",
+    "ക്ലാസ് മുടങ്ങി", "ഹാജരായില്ല", "ഹാജരായി", "ക്ലാസ് പോയി",
+    "എത്ര ക്ലാസ്", "ക്ലാസ് മിസ്സ്", "75 ശതമാനം", "ക്ലാസ് കുറവ്",
+    // Manglish
+    "hajr", "haazir", "class poyi", "class poyilla", "ethra class",
+    "class miss", "attendance shortage", "hajar report",
   ],
   assignments: [
     "assignment",
@@ -88,10 +88,12 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "deadline",
     "pending assignment",
     "due",
-    // Malayalam / Manglish
-    "അസൈൻമെന്റ്",
-    "homework kodukkana",
-    "submit cheyyanda",
+    // Malayalam script
+    "അസൈൻമെന്റ്", "അസൈൻമെന്റുകൾ", "ഹോംവർക്ക്", "സബ്മിഷൻ",
+    "ഡെഡ്‌ലൈൻ", "സമർപ്പിക്കൽ", "കൊടുക്കേണ്ട", "പെൻഡിംഗ്",
+    // Manglish
+    "homework kodukkana", "submit cheyyanda", "assignment submit",
+    "assignment deadline",
   ],
   timetable: [
     "timetable",
@@ -99,12 +101,13 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "class schedule",
     "period",
     "today's class",
-    // Malayalam / Manglish
-    "ടൈംടേബിൾ",
-    "innathe class",
-    "class evide",
-    "engane class",
-    "class schedule",
+    // Malayalam script
+    "ടൈംടേബിൾ", "ക്ലാസ് ഷെഡ്യൂൾ", "ഇന്നത്തെ ക്ലാസ്", "ഇന്ന് ക്ലാസ്",
+    "ഏത് ക്ലാസ്", "ക്ലാസ് എവിടെ", "ക്ലാസ് എപ്പോൾ", "പിരീഡ്",
+    "ഷെഡ്യൂൾ", "ആഴ്ചയിലെ ക്ലാസ്",
+    // Manglish
+    "innathe class", "class evide", "engane class", "enna class",
+    "time table", "class schedule",
   ],
   leaves: [
     "leave",
@@ -113,20 +116,30 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "leave application",
     "leave history",
     "applied leave",
-    // Malayalam / Manglish
-    "ലീവ്",
-    "leave edukkan",
-    "avanhi edukkan",
+    // Malayalam script
+    "ലീവ്", "അവധി", "ലീവ് ബാലൻസ്", "ലീവ് അപ്ലിക്കേഷൻ",
+    "ലീവ് ചരിത്രം", "അനുവദിച്ച ലീവ്", "ലീവ് എടുക്കാൻ",
+    "അവധി ദിവസം", "ലീവ് ബക്കി",
+    // Manglish
+    "leave edukkan", "avanhi edukkan", "leave balance entha",
+    "leave apply", "leave history",
   ],
   results: [
     "result", "marks", "grade", "cgpa", "performance", "score", "exam",
-    // Malayalam / Manglish
-    "മാർക്ക്", "റിസൾട്ട്", "mark kitty", "exam result", "ente marks",
+    // Malayalam script
+    "മാർക്ക്", "റിസൾട്ട്", "ഗ്രേഡ്", "സ്കോർ", "പ്രകടനം",
+    "പരീക്ഷ", "മാർക്ക് കിട്ടി", "ഫലം", "സിജിപിഎ",
+    "എന്റെ മാർക്ക്", "പരീക്ഷ ഫലം",
+    // Manglish
+    "mark kitty", "exam result", "ente marks", "result entha",
   ],
   notifications: [
     "notification", "notice", "announcement", "alert",
-    // Malayalam / Manglish
-    "അറിയിപ്പ്", "notice board", "enthenkilum update",
+    // Malayalam script
+    "അറിയിപ്പ്", "അറിയിപ്പുകൾ", "നോട്ടീസ്", "അനൗൺസ്മെന്റ്",
+    "അപ്ഡേറ്റ്", "ഇൻഫർമേഷൻ", "വിജ്ഞാപനം",
+    // Manglish
+    "notice board", "enthenkilum update", "notification entha",
   ],
   profile: [
     "profile",
@@ -143,8 +156,12 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "my id",
     "my account",
     "account",
-    // Malayalam / Manglish
-    "അക്കൗണ്ട്", "പ്രൊഫൈൽ", "എന്റെ വിവരങ്ങൾ", "ente profile", "ente account",
+    // Malayalam script
+    "അക്കൗണ്ട്", "പ്രൊഫൈൽ", "എന്റെ വിവരങ്ങൾ", "എന്റെ പേര്",
+    "എന്റെ ഇമെയിൽ", "എന്റെ ഐഡി", "റോൾ നമ്പർ", "എന്നെ കുറിച്ച്",
+    "വ്യക്തിഗത വിവരം",
+    // Manglish
+    "ente profile", "ente account", "ente details", "ente name",
   ],
   students: [
     "student list",
@@ -155,6 +172,8 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "how many students",
     "student info",
     "student details",
+    // Malayalam script
+    "വിദ്യാർഥികൾ", "സ്റ്റുഡന്റ്സ്", "ബാച്ച് വിദ്യാർഥികൾ",
   ],
   faculty: [
     "faculty list",
@@ -163,22 +182,38 @@ const INTENT_KEYWORDS: Record<string, string[]> = {
     "faculty details",
     "staff",
     "teachers",
+    // Malayalam script
+    "അദ്ധ്യാപകർ", "ഫാക്കൽറ്റി", "സ്റ്റാഫ്",
   ],
-  departments: ["department", "departments", "dept stats", "department info"],
+  departments: [
+    "department", "departments", "dept stats", "department info",
+    // Malayalam script
+    "ഡിപ്പാർട്ട്മെന്റ്", "വിഭാഗം",
+  ],
   internals: [
     "internal", "internals", "internal mark", "internal marks",
     "clearing internals", "pass internals", "internal calculation",
     "how much mark", "marks needed", "series exam", "series mark",
     "first series", "second series", "internal assessment",
-    // Malayalam / Manglish
-    "ഇന്റേണൽ", "internal mark entha", "internal kittan", "series mark",
+    // Malayalam script
+    "ഇന്റേണൽ", "ഇന്റേണൽ മാർക്ക്", "സീരീസ് മാർക്ക്",
+    "ഫസ്റ്റ് സീരീസ്", "സെക്കൻഡ് സീരീസ്", "ഇന്റേണൽ കണക്കുകൂട്ടൽ",
+    "എത്ര മാർക്ക്", "ഇന്റേണൽ പാസ്",
+    // Manglish
+    "internal mark entha", "internal kittan", "series mark entha",
   ],
-  evaluation: ["evaluation", "appraisal", "rating", "faculty rating"],
+  evaluation: [
+    "evaluation", "appraisal", "rating", "faculty rating",
+    // Malayalam script
+    "മൂല്യനിർണ്ണയം", "റേറ്റിംഗ്",
+  ],
   student_leaves: [
     "student leave",
     "student leave application",
     "leave requests",
     "pending leaves",
+    // Malayalam script
+    "വിദ്യാർഥി ലീവ്", "ലീവ് അഭ്യർഥനകൾ", "ലീവ് റിക്വസ്റ്റ്",
   ],
 };
 
@@ -215,6 +250,36 @@ function isGreeting(message: string): boolean {
       lower === kw || lower.startsWith(kw + " ") || lower.endsWith(" " + kw),
   );
 }
+
+// Detect if text contains Malayalam script (U+0D00–U+0D7F)
+function hasMalayalam(text: string): boolean {
+  return /[ഀ-ൿ]/.test(text);
+}
+
+// Role labels in Malayalam
+const ROLE_LABEL_ML: Record<string, string> = {
+  admin: "അഡ്മിൻ അസിസ്റ്റന്റ്",
+  faculty: "ഫാക്കൽറ്റി അസിസ്റ്റന്റ്",
+  student: "സ്റ്റുഡന്റ് അസിസ്റ്റന്റ്",
+  parent: "പേരന്റ് പോർട്ടൽ അസിസ്റ്റന്റ്",
+};
+
+// Intent names in Malayalam for display
+const INTENT_LABEL_ML: Record<string, string> = {
+  attendance: "ഹാജർ",
+  assignments: "അസൈൻമെന്റുകൾ",
+  timetable: "ടൈംടേബിൾ",
+  leaves: "ലീവ്",
+  results: "ഫലങ്ങൾ",
+  internals: "ഇന്റേണൽ മാർക്ക്",
+  notifications: "അറിയിപ്പുകൾ",
+  profile: "പ്രൊഫൈൽ",
+  students: "വിദ്യാർഥികൾ",
+  faculty: "ഫാക്കൽറ്റി",
+  departments: "ഡിപ്പാർട്ട്മെന്റ്",
+  evaluation: "മൂല്യനിർണ്ണയം",
+  student_leaves: "വിദ്യാർഥി ലീവ്",
+};
 
 // Time/date questions — handled locally
 const TIME_DATE_KEYWORDS = [
@@ -610,7 +675,28 @@ async function fetchForIntent(
       if (user.role === "parent" && user.childUid) {
         const studentSnap = await getDoc(doc(db, "students", user.childUid));
         if (studentSnap.exists()) {
-          const batchId = studentSnap.data().batchId;
+          const studentData = studentSnap.data();
+          let batchId = studentData.batchId || "";
+
+          // Student docs store batch as a name string, not an ID — resolve it
+          if (!batchId && studentData.batch) {
+            try {
+              const batchSnap = await getDocs(collection(db, "batches"));
+              const studentBatch = studentData.batch;
+              const studentDept = studentData.department || "";
+              const matchedBatch = batchSnap.docs.find((d) => {
+                const bName = d.data().name || "";
+                return (
+                  bName === studentBatch ||
+                  bName === `${studentDept} ${studentBatch}` ||
+                  bName.includes(studentBatch) ||
+                  studentBatch.includes(bName)
+                );
+              });
+              if (matchedBatch) batchId = matchedBatch.id;
+            } catch { /* skip */ }
+          }
+
           if (batchId) {
             const ttSnap = await getDoc(doc(db, "timetables", batchId));
             if (ttSnap.exists()) return processTT(ttSnap.data(), ttSnap.id);
@@ -789,19 +875,41 @@ async function fetchForIntent(
         };
       }
       if (user.role === "parent") {
-        const q = query(col(db, "parents"), where("email", "==", user.email));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const d = snap.docs[0].data();
-          return {
-            name: d.name,
-            email: d.email,
-            phone: d.phone,
-            studentName: d.studentName,
-            relation: d.relation,
+        // Return child's student profile (primary) + parent contact info
+        const result: Record<string, any> = {};
+
+        if (user.childUid) {
+          const childSnap = await getDoc(doc(db, "students", user.childUid));
+          if (childSnap.exists()) {
+            const c = childSnap.data();
+            result.child = {
+              name: c.name,
+              regNumber: c.regNumber || c.rollNumber,
+              batch: c.batch,
+              department: c.department,
+              email: c.email,
+              phone: c.phone,
+              bloodGroup: c.bloodGroup,
+              dob: c.dob,
+              address: c.address,
+            };
+          }
+        }
+
+        // Also include parent's own info
+        const parentQ = query(col(db, "parents"), where("email", "==", user.email));
+        const parentSnap = await getDocs(parentQ);
+        if (!parentSnap.empty) {
+          const p = parentSnap.docs[0].data();
+          result.parent = {
+            name: p.name,
+            email: p.email,
+            phone: p.phone,
+            relation: p.relation,
           };
         }
-        return null;
+
+        return Object.keys(result).length > 0 ? result : null;
       }
       if (user.role === "admin") {
         const q = query(col(db, "admins"), where("email", "==", user.email));
@@ -1499,21 +1607,31 @@ export default function EduBot() {
 
         // ── Step 0b: Handle greetings locally ────────
         if (isGreeting(text)) {
+          const isMl = hasMalayalam(text);
           const roleLabel: Record<Role, string> = {
             admin: "Administrative Assistant",
             faculty: "Faculty Assistant",
             student: "Student Assistant",
             parent: "Parent Portal Assistant",
           };
-          addBotMessage(
-            `👋 Hey there, **${resolvedUser.name}!** I'm EduBot — your ${roleLabel[resolvedUser.role]}.\n\nI can help you with:\n${ROLE_ALLOWED_INTENTS[
-              resolvedUser.role
-            ]
-              .map((i) => `• ${i.replace(/_/g, " ")}`)
-              .join(
-                "\n",
-              )}\n\nJust tap a quick action above or ask me anything! 😊`,
-          );
+          if (isMl) {
+            const allowedMl = ROLE_ALLOWED_INTENTS[resolvedUser.role]
+              .map((i) => `• ${INTENT_LABEL_ML[i] || i}`)
+              .join("\n");
+            addBotMessage(
+              `👋 നമസ്കാരം, **${resolvedUser.name}!** ഞാൻ EduBot — നിങ്ങളുടെ ${ROLE_LABEL_ML[resolvedUser.role] || "അസിസ്റ്റന്റ്"}.\n\nഇക്കാര്യങ്ങളിൽ ഞാൻ സഹായിക്കാം:\n${allowedMl}\n\nചുവടെ ഉള്ള ബട്ടണുകൾ ഉപയോഗിക്കൂ അല്ലെങ്കിൽ നേരിട്ട് ചോദിക്കൂ! 😊`,
+            );
+          } else {
+            addBotMessage(
+              `👋 Hey there, **${resolvedUser.name}!** I'm EduBot — your ${roleLabel[resolvedUser.role]}.\n\nI can help you with:\n${ROLE_ALLOWED_INTENTS[
+                resolvedUser.role
+              ]
+                .map((i) => `• ${i.replace(/_/g, " ")}`)
+                .join(
+                  "\n",
+                )}\n\nJust tap a quick action above or ask me anything! 😊`,
+            );
+          }
           return;
         }
 
@@ -1540,6 +1658,7 @@ export default function EduBot() {
         }
 
         if (!intent) {
+          const isMl = hasMalayalam(text);
           // General question — send to Ollama without Firestore data
           try {
             const chatHistory = messages
@@ -1565,23 +1684,25 @@ export default function EduBot() {
 
             if (response.ok) {
               const data = await response.json();
-              addBotMessage(data.response || "I wasn't able to process that right now. Could you try rephrasing your question? 😊");
+              addBotMessage(data.response || (isMl
+                ? "ക്ഷമിക്കണം, ഇപ്പോൾ ഉത്തരം ലഭ്യമല്ല. ദയവായി വീണ്ടും ശ്രമിക്കൂ. 😊"
+                : "I wasn't able to process that right now. Could you try rephrasing your question? 😊"));
             } else {
-              addBotMessage(
-                `😊 I'd love to help, but I'm not quite sure what you're looking for! Here are some things I can assist you with:\n${ROLE_ALLOWED_INTENTS[
-                  resolvedUser.role
-                ]
-                  .map((i) => `• ${i.replace(/_/g, " ")}`)
-                  .join("\n")}\n\nFeel free to ask about any of these, or try the quick actions above!`,
+              const allowedList = isMl
+                ? ROLE_ALLOWED_INTENTS[resolvedUser.role].map((i) => `• ${INTENT_LABEL_ML[i] || i}`).join("\n")
+                : ROLE_ALLOWED_INTENTS[resolvedUser.role].map((i) => `• ${i.replace(/_/g, " ")}`).join("\n");
+              addBotMessage(isMl
+                ? `😊 ക്ഷമിക്കണം, ആ ചോദ്യം എനിക്ക് മനസ്സിലായില്ല! ഇക്കാര്യങ്ങളിൽ ഞാൻ സഹായിക്കാം:\n${allowedList}\n\nദയവായി ഈ വിഷയങ്ങളിൽ ചോദിക്കൂ!`
+                : `😊 I'd love to help, but I'm not quite sure what you're looking for! Here are some things I can assist you with:\n${allowedList}\n\nFeel free to ask about any of these, or try the quick actions above!`
               );
             }
           } catch {
-            addBotMessage(
-              `😊 I'd love to help, but I'm not quite sure what you're looking for! Here are some things I can assist you with:\n${ROLE_ALLOWED_INTENTS[
-                resolvedUser.role
-              ]
-                .map((i) => `• ${i.replace(/_/g, " ")}`)
-                .join("\n")}\n\nFeel free to ask about any of these, or try the quick actions above!`,
+            const allowedList = hasMalayalam(text)
+              ? ROLE_ALLOWED_INTENTS[resolvedUser.role].map((i) => `• ${INTENT_LABEL_ML[i] || i}`).join("\n")
+              : ROLE_ALLOWED_INTENTS[resolvedUser.role].map((i) => `• ${i.replace(/_/g, " ")}`).join("\n");
+            addBotMessage(hasMalayalam(text)
+              ? `😊 ക്ഷമിക്കണം, ആ ചോദ്യം എനിക്ക് മനസ്സിലായില്ല! ഇക്കാര്യങ്ങളിൽ ഞാൻ സഹായിക്കാം:\n${allowedList}\n\nദയവായി ഈ വിഷയങ്ങളിൽ ചോദിക്കൂ!`
+              : `😊 I'd love to help, but I'm not quite sure what you're looking for! Here are some things I can assist you with:\n${allowedList}\n\nFeel free to ask about any of these, or try the quick actions above!`
             );
           }
           return;
@@ -1589,13 +1710,23 @@ export default function EduBot() {
 
         // ── Step 2: Role gate (hard block) ──────────
         if (!isIntentAllowed(resolvedUser.role, intent)) {
-          addBotMessage(
-            `🔒 **Access Restricted**\n\nSorry, that information isn't available for your role. As a **${resolvedUser.role}**, here's what I can help you with:\n${ROLE_ALLOWED_INTENTS[
-              resolvedUser.role
-            ]
-              .map((i) => `• ${i.replace(/_/g, " ")}`)
-              .join("\n")}\n\nJust ask about any of these and I'll be happy to help! 😊`,
-          );
+          const isMl = hasMalayalam(text);
+          if (isMl) {
+            const allowedMl = ROLE_ALLOWED_INTENTS[resolvedUser.role]
+              .map((i) => `• ${INTENT_LABEL_ML[i] || i}`)
+              .join("\n");
+            addBotMessage(
+              `🔒 **ആക്സസ് പ്രതിബന്ധം**\n\nക്ഷമിക്കണം, ആ വിവരം നിങ്ങളുടെ റോളിന് ലഭ്യമല്ല. **${resolvedUser.role}** ആയി ഇക്കാര്യങ്ങളിൽ ഞാൻ സഹായിക്കാം:\n${allowedMl}\n\nഇതിൽ ഏതെങ്കിലും ചോദിക്കൂ! 😊`,
+            );
+          } else {
+            addBotMessage(
+              `🔒 **Access Restricted**\n\nSorry, that information isn't available for your role. As a **${resolvedUser.role}**, here's what I can help you with:\n${ROLE_ALLOWED_INTENTS[
+                resolvedUser.role
+              ]
+                .map((i) => `• ${i.replace(/_/g, " ")}`)
+                .join("\n")}\n\nJust ask about any of these and I'll be happy to help! 😊`,
+            );
+          }
           return;
         }
 
@@ -1605,8 +1736,9 @@ export default function EduBot() {
           contextData = await fetchForIntent(intent, resolvedUser, text);
         } catch (dbError) {
           console.error("DB fetch error:", dbError);
-          addBotMessage(
-            "😔 Oops! I'm having trouble reaching the server right now. Please try again in a moment — I'll be ready to help!",
+          addBotMessage(hasMalayalam(text)
+            ? "😔 ക്ഷമിക്കണം! ഇപ്പോൾ സെർവറിൽ എത്താൻ ബുദ്ധിമുട്ടുണ്ട്. ഒരു നിമിഷം കഴിഞ്ഞ് വീണ്ടും ശ്രമിക്കൂ!"
+            : "😔 Oops! I'm having trouble reaching the server right now. Please try again in a moment — I'll be ready to help!"
           );
           return;
         }
@@ -1643,7 +1775,10 @@ export default function EduBot() {
         addBotMessage(data.response || "No response from server.");
       } catch (error) {
         console.error("EduBot error:", error);
-        addBotMessage("😔 Something unexpected happened on my end. Please try again — I'm sure we'll get it right this time!");
+        addBotMessage(hasMalayalam(text)
+          ? "😔 എന്തോ പ്രശ്നം സംഭവിച്ചു. ദയവായി വീണ്ടും ശ്രമിക്കൂ!"
+          : "😔 Something unexpected happened on my end. Please try again — I'm sure we'll get it right this time!"
+        );
         setIsTyping(false);
       }
     },
@@ -1675,8 +1810,9 @@ export default function EduBot() {
 
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
-    // Default to English; Malayalam is handled via NLP on the text input
-    recognition.lang = "en-IN";
+    // Use Malayalam if the last message in the input box or chat was in Malayalam
+    const lastText = inputRef.current?.value || messages.filter(m => m.sender === "user").slice(-1)[0]?.text || "";
+    recognition.lang = hasMalayalam(lastText) ? "ml-IN" : "en-IN";
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.continuous = false;

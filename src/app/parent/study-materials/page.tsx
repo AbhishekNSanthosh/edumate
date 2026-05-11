@@ -2,12 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
 import toast from "react-hot-toast";
 import {
@@ -60,7 +55,7 @@ function formatFileExtension(fileType: string) {
   return "FILE";
 }
 
-export default function StudentStudyMaterials() {
+export default function ParentStudyMaterials() {
   const { user } = useAuth();
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,14 +65,14 @@ export default function StudentStudyMaterials() {
 
   useEffect(() => {
     if (!user) return;
-    fetchStudentAndMaterials();
+    fetchMaterials();
   }, [user]);
 
-  const fetchStudentAndMaterials = async () => {
+  const fetchMaterials = async () => {
     try {
       setLoading(true);
 
-      // Get student's batch
+      // Get the linked student's batch (parent uid == student uid in this system)
       const studentSnap = await getDocs(
         query(collection(db, "students"), where("__name__", "==", user!.uid))
       );
@@ -89,12 +84,10 @@ export default function StudentStudyMaterials() {
       }
 
       if (!batch) {
-        // No batch assigned — show nothing
         setMaterials([]);
         return;
       }
 
-      // Fetch materials for this batch only
       const snap = await getDocs(
         query(collection(db, "study_materials"), where("batch", "==", batch))
       );
@@ -136,7 +129,7 @@ export default function StudentStudyMaterials() {
           Study Materials
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          Course notes, videos, and resources shared by your faculty
+          Course notes, videos, and resources shared by your child&apos;s faculty
         </p>
       </div>
 
@@ -158,7 +151,7 @@ export default function StudentStudyMaterials() {
         </div>
         <div className="bg-white rounded-lg p-4 border border-gray-100 hidden md:block">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
-            Your Batch
+            Batch
           </p>
           <p className="text-lg font-bold text-gray-900 mt-1 truncate">{studentBatch || "—"}</p>
         </div>
@@ -167,7 +160,7 @@ export default function StudentStudyMaterials() {
       {/* No batch warning */}
       {!loading && !studentBatch && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-sm text-yellow-800">
-          Your account is not assigned to a batch yet. Contact your administrator.
+          No batch has been assigned to your child&apos;s account yet. Contact the administrator.
         </div>
       )}
 
@@ -293,8 +286,8 @@ export default function StudentStudyMaterials() {
             {searchTerm || filterSubject !== "All"
               ? "Try adjusting your search or filter"
               : studentBatch
-              ? "Your faculty hasn't uploaded any materials yet"
-              : "No batch assigned to your account"}
+              ? "No materials have been uploaded for this batch yet"
+              : "No batch assigned to your child's account"}
           </p>
         </div>
       )}

@@ -211,9 +211,9 @@ export default function FeesPage() {
       <div className="p-6 bg-gray-50 min-h-screen animate-pulse">
         <div className="h-7 w-36 bg-gray-200 rounded mb-6" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-white rounded-xl border border-gray-200" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-white rounded-lg border border-gray-200" />)}
         </div>
-        <div className="h-72 bg-white rounded-xl border border-gray-200" />
+        <div className="h-72 bg-white rounded-lg border border-gray-200" />
       </div>
     );
   }
@@ -229,7 +229,7 @@ export default function FeesPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Outstanding */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Main Fees Outstanding</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">{fmtCurrency(totalOutstanding)}</p>
           <div className="mt-3 w-full bg-gray-100 rounded-full h-1">
@@ -238,7 +238,7 @@ export default function FeesPage() {
         </div>
 
         {/* Next due */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Next Due Date</p>
           <p className="text-xl font-bold text-gray-900 mt-2">
             {nextDue
@@ -255,7 +255,7 @@ export default function FeesPage() {
         {/* Hostel/Transport shortcut */}
         <Link
           href="/student/hostel-and-trans"
-          className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col justify-between hover:border-blue-300 hover:bg-blue-50/30 transition group"
+          className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col justify-between hover:border-blue-300 hover:bg-blue-50/30 transition group"
         >
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Optional Services</p>
@@ -275,7 +275,7 @@ export default function FeesPage() {
       </div>
 
       {/* Main Fee Breakdown */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
           <MdReceiptLong className="text-blue-600 text-xl" />
           <h2 className="font-semibold text-gray-900">Main Fees Breakdown</h2>
@@ -359,7 +359,7 @@ export default function FeesPage() {
 
       {/* Legacy optional fees that may have been assigned to fees collection */}
       {optionalFees.length > 0 && (
-        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-amber-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-amber-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-amber-500">ℹ️</span>
@@ -399,7 +399,7 @@ export default function FeesPage() {
 
       {/* Transaction history */}
       {fees.some((f) => f.status === "paid" || (f.paidAmount && f.paidAmount > 0)) && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Payment History</h2>
           </div>

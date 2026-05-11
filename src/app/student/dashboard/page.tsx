@@ -265,38 +265,38 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="w-full p-4 md:p-6 bg-gray-50/50 min-h-screen">
+      <div className="w-full p-3 sm:p-4 md:p-6 bg-gray-50/50 min-h-screen">
         <div className="max-w-7xl mx-auto animate-pulse">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-3 sm:gap-4">
             <div>
-              <div className="h-8 w-56 bg-gray-200 rounded-lg mb-3"></div>
-              <div className="h-4 w-40 bg-gray-200 rounded-lg"></div>
+              <div className="h-7 sm:h-8 w-44 sm:w-56 bg-gray-200 rounded-lg mb-3"></div>
+              <div className="h-4 w-36 sm:w-40 bg-gray-200 rounded-lg"></div>
             </div>
-            <div className="h-10 w-36 bg-gray-200 rounded-xl"></div>
+            <div className="h-10 w-32 sm:w-36 bg-gray-200 rounded-lg"></div>
           </div>
-          <div className="bg-white rounded-2xl p-6 mb-6">
-            <div className="h-6 w-40 bg-gray-200 rounded-lg mb-4"></div>
+          <div className="bg-white rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
+            <div className="h-5 sm:h-6 w-36 sm:w-40 bg-gray-200 rounded-lg mb-4"></div>
             <div className="flex gap-3 overflow-hidden">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-24 w-48 bg-gray-100 rounded-xl shrink-0"></div>
+                <div key={i} className="h-24 w-36 sm:w-48 bg-gray-100 rounded-lg shrink-0"></div>
               ))}
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-6 mb-6">
-            <div className="h-6 w-48 bg-gray-200 rounded-lg mb-4"></div>
+          <div className="bg-white rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
+            <div className="h-5 sm:h-6 w-40 sm:w-48 bg-gray-200 rounded-lg mb-4"></div>
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 w-full bg-gray-100 rounded-xl"></div>
+                <div key={i} className="h-12 w-full bg-gray-100 rounded-lg"></div>
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl h-56 p-6">
-                <div className="h-6 w-32 bg-gray-200 rounded-lg mb-4"></div>
+              <div key={i} className={`bg-white rounded-lg h-56 p-4 sm:p-6${i === 2 ? " sm:col-span-2 lg:col-span-1" : ""}`}>
+                <div className="h-5 sm:h-6 w-28 sm:w-32 bg-gray-200 rounded-lg mb-4"></div>
                 <div className="space-y-3">
-                  <div className="h-10 w-full bg-gray-100 rounded-xl"></div>
-                  <div className="h-10 w-full bg-gray-100 rounded-xl"></div>
+                  <div className="h-10 w-full bg-gray-100 rounded-lg"></div>
+                  <div className="h-10 w-full bg-gray-100 rounded-lg"></div>
                 </div>
               </div>
             ))}
@@ -307,12 +307,12 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="w-full p-4 md:p-6 bg-gray-50/50 min-h-screen">
+    <div className="w-full p-3 sm:p-4 md:p-6 bg-gray-50/50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-3 sm:gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
               Dashboard
             </h1>
             <p className="text-sm text-gray-500 mt-1">
@@ -323,7 +323,7 @@ export default function Dashboard() {
             </p>
           </div>
           {batchName && (
-            <span className="inline-flex items-center gap-2 text-gray-600 pl-3 pr-4 py-2 rounded-xl text-sm font-medium bg-gray-100">
+            <span className="inline-flex items-center gap-2 text-gray-600 pl-3 pr-4 py-2 rounded-lg text-sm font-medium bg-gray-100">
               <span className="w-2 h-2 rounded-full bg-blue-500"></span>
               {batchName}
             </span>
@@ -332,8 +332,8 @@ export default function Dashboard() {
 
         {/* Today's Schedule - Hero Card */}
         {WEEKDAYS.includes(today) && hasTimetable && (
-          <div className="bg-white rounded-2xl mb-6 overflow-hidden">
-            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+          <div className="bg-white rounded-lg mb-4 sm:mb-6 overflow-hidden">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">
                   Today&apos;s Schedule
@@ -347,15 +347,15 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <div className="px-5 pb-5">
-              <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory scrollbar-hide">
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+              <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory scrollbar-hide">
                 {todayClasses.length > 0 ? (
                   todayClasses.map((cls: any, i: number) => {
                     if (cls.isBreak) {
                       return (
                         <div
                           key={`break-${i}`}
-                          className="shrink-0 snap-start flex items-center justify-center w-20 self-stretch"
+                          className="shrink-0 snap-start flex items-center justify-center w-16 sm:w-20 self-stretch"
                         >
                           <div className="flex flex-col items-center gap-1">
                             <div className="w-px h-4 bg-gray-200"></div>
@@ -374,16 +374,16 @@ export default function Dashboard() {
                     return (
                       <div
                         key={cls.id || i}
-                        className={`shrink-0 snap-start w-44 rounded-xl p-3.5 transition-all ${
+                        className={`shrink-0 snap-start w-36 sm:w-44 rounded-lg p-3 sm:p-3.5 transition-all ${
                           isNow
                             ? "bg-blue-600 text-white"
                             : color.bg
                         }`}
                       >
-                        <div className={`text-[11px] font-medium mb-2 ${isNow ? "text-blue-100" : "text-gray-400"}`}>
+                        <div className={`text-[11px] font-medium mb-1.5 sm:mb-2 ${isNow ? "text-blue-100" : "text-gray-400"}`}>
                           {formatTimeShort(cls.timing)}
                         </div>
-                        <div className={`text-sm font-semibold mb-1 leading-tight ${isNow ? "text-white" : color.text}`}>
+                        <div className={`text-xs sm:text-sm font-semibold mb-1 leading-tight ${isNow ? "text-white" : color.text}`}>
                           {cls.subject}
                         </div>
                         <div className={`text-xs ${isNow ? "text-blue-100" : "text-gray-500"}`}>
@@ -408,8 +408,8 @@ export default function Dashboard() {
         )}
 
         {/* Full Week Timetable */}
-        <div className="bg-white rounded-2xl mb-6 overflow-hidden">
-          <div className="px-5 pt-5 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-white rounded-lg mb-4 sm:mb-6 overflow-hidden">
+          <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-gray-900">
               Weekly Timetable
             </h2>
@@ -423,8 +423,8 @@ export default function Dashboard() {
           {hasTimetable && (
             <>
               {/* Day Tabs - visible on all screens */}
-              <div className="px-5 pb-3 md:hidden">
-                <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl">
+              <div className="px-4 sm:px-5 pb-3 md:hidden">
+                <div className="flex gap-1 sm:gap-1.5 bg-gray-100 p-1 rounded-lg">
                   {WEEKDAYS.map((day, i) => (
                     <button
                       key={day}
@@ -444,7 +444,7 @@ export default function Dashboard() {
               </div>
 
               {/* Mobile: Selected Day View */}
-              <div className="md:hidden px-4 pb-5">
+              <div className="md:hidden px-3 sm:px-4 pb-4 sm:pb-5">
                 <div className="space-y-2">
                   {allTimings.map((slot: any, idx: number) => {
                     if (slot.type === "interval") {
@@ -469,12 +469,12 @@ export default function Dashboard() {
                     return (
                       <div
                         key={slot.id || idx}
-                        className={`flex items-stretch gap-3 rounded-xl transition-all ${
+                        className={`flex items-stretch gap-3 rounded-lg transition-all ${
                           isNow ? "ring-2 ring-blue-500 ring-offset-2" : ""
                         }`}
                       >
                         {/* Time label */}
-                        <div className="w-16 shrink-0 flex flex-col justify-center py-3">
+                        <div className="w-14 sm:w-16 shrink-0 flex flex-col justify-center py-3">
                           <span className="text-[11px] font-semibold text-gray-500 leading-tight">
                             {formatTimeShort(slot.time.split(" - ")[0])}
                           </span>
@@ -485,7 +485,7 @@ export default function Dashboard() {
 
                         {/* Class card */}
                         {entry ? (
-                          <div className={`flex-1 ${color!.bg} rounded-xl p-3.5`}>
+                          <div className={`flex-1 ${color!.bg} rounded-lg p-3.5`}>
                             <div className={`text-sm font-semibold ${color!.text} leading-tight`}>
                               {entry.subject}
                             </div>
@@ -500,7 +500,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex-1 bg-gray-50 rounded-xl p-3.5 flex items-center">
+                          <div className="flex-1 bg-gray-50 rounded-lg p-3.5 flex items-center">
                             <span className="text-xs text-gray-300">Free period</span>
                           </div>
                         )}
@@ -631,9 +631,9 @@ export default function Dashboard() {
           )}
 
           {!hasTimetable && (
-            <div className="px-5 pb-8 pt-2">
+            <div className="px-4 sm:px-5 pb-8 pt-2">
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-4 text-2xl">
+                <div className="w-14 h-14 rounded-lg bg-gray-50 flex items-center justify-center mb-4 text-2xl">
                   📅
                 </div>
                 <p className="text-sm font-medium text-gray-500 mb-1">
@@ -650,15 +650,15 @@ export default function Dashboard() {
         </div>
 
         {/* Bottom Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Announcements */}
-          <div className="bg-white rounded-2xl overflow-hidden">
-            <div className="px-5 pt-5 pb-3">
+          <div className="bg-white rounded-lg overflow-hidden">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
               <h2 className="text-base font-semibold text-gray-900">
                 Announcements
               </h2>
             </div>
-            <div className="px-5 pb-5 space-y-2.5 max-h-80 overflow-y-auto">
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2.5 max-h-72 sm:max-h-80 overflow-y-auto">
               {notifications.length > 0 ? (
                 notifications.map((notif: any) => {
                   const date = notif.createdAt?.toDate
@@ -674,7 +674,7 @@ export default function Dashboard() {
                     : null;
 
                   return (
-                    <div key={notif.id} className="p-3 bg-gray-50 rounded-xl">
+                    <div key={notif.id} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-start gap-2.5">
                         <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 shrink-0"></span>
                         <div className="min-w-0 flex-1">
@@ -707,13 +707,13 @@ export default function Dashboard() {
           </div>
 
           {/* Performance */}
-          <div className="bg-white rounded-2xl overflow-hidden">
-            <div className="px-5 pt-5 pb-3">
+          <div className="bg-white rounded-lg overflow-hidden">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
               <h2 className="text-base font-semibold text-gray-900">
                 Performance
               </h2>
             </div>
-            <div className="px-5 pb-5">
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5">
               {performance.length > 0 ? (
                 <div className="space-y-3.5">
                   {performance.slice(0, 5).map((item, i) => {
@@ -763,16 +763,16 @@ export default function Dashboard() {
           </div>
 
           {/* Reminders & Quick Info */}
-          <div className="bg-white rounded-2xl overflow-hidden">
-            <div className="px-5 pt-5 pb-3">
+          <div className="bg-white rounded-lg overflow-hidden sm:col-span-2 lg:col-span-1">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
               <h2 className="text-base font-semibold text-gray-900">
                 Quick Info
               </h2>
             </div>
-            <div className="px-5 pb-5 space-y-2.5">
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2.5">
               {/* Attendance overview */}
               {attendanceSummary.total > 0 && (
-                <div className="p-3 rounded-xl bg-gray-50">
+                <div className="p-3 rounded-lg bg-gray-50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-gray-900">
                       Attendance
@@ -814,7 +814,7 @@ export default function Dashboard() {
               {/* Recent leave */}
               {recentLeave && (
                 <div
-                  className={`p-3 rounded-xl ${
+                  className={`p-3 rounded-lg ${
                     recentLeave.status === "Approved"
                       ? "bg-emerald-50"
                       : recentLeave.status === "Rejected"

@@ -39,7 +39,7 @@ export default function DepartmentDetailPage() {
           router.push("/admin/department");
           return;
         }
-        const deptData = { id: deptDoc.id, ...deptDoc.data() };
+        const deptData = { id: deptDoc.id, ...deptDoc.data() } as { id: string; name: string; [key: string]: any };
         setDept(deptData);
 
         const deptName = deptData.name;

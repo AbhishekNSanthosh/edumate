@@ -254,16 +254,16 @@ export default function AttendancePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1.5 mb-6 w-fit">
+      <div className="flex gap-1 bg-white rounded-lg border border-gray-200 p-1.5 mb-6 w-fit">
         <button
           onClick={() => setTab('overview')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'overview' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'overview' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
         >
           Overview
         </button>
         <button
           onClick={() => setTab('calendar')}
-          className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'calendar' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
+          className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'calendar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
         >
           <MdCalendarToday className="text-base" /> Calendar
         </button>
@@ -393,7 +393,7 @@ export default function AttendancePage() {
         <>
           {/* Subject filter */}
           {calSubjects.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-100 p-4 mb-5 flex flex-wrap items-center gap-3">
+            <div className="bg-white rounded-lg border border-gray-100 p-4 mb-5 flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-gray-600">Filter by subject:</span>
               <select value={calSubject} onChange={e => setCalSubject(e.target.value)}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
@@ -405,11 +405,11 @@ export default function AttendancePage() {
 
           {/* Month navigator */}
           <div className="flex items-center justify-between mb-4">
-            <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-white border border-gray-200 hover:shadow-sm transition">
+            <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-white border border-gray-200 transition">
               <MdChevronLeft className="text-xl text-gray-600" />
             </button>
             <h2 className="text-lg font-bold text-gray-900">{MONTH_NAMES[calMonth]} {calYear}</h2>
-            <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-white border border-gray-200 hover:shadow-sm transition">
+            <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-white border border-gray-200 transition">
               <MdChevronRight className="text-xl text-gray-600" />
             </button>
           </div>
@@ -419,7 +419,7 @@ export default function AttendancePage() {
             {(Object.entries(monthlySummary) as [string, number][]).map(([status, count]) => {
               const cfg = STATUS_CONFIG[status];
               return (
-                <div key={status} className={`${cfg.bg} border ${cfg.border} rounded-xl p-3 text-center`}>
+                <div key={status} className={`${cfg.bg} border ${cfg.border} rounded-lg p-3 text-center`}>
                   <p className={`text-2xl font-bold ${cfg.text}`}>{count}</p>
                   <p className={`text-xs font-medium ${cfg.text}`}>{cfg.label}</p>
                 </div>
@@ -429,11 +429,11 @@ export default function AttendancePage() {
 
           {/* Calendar grid */}
           {calLoading ? (
-            <div className="bg-white rounded-xl border border-gray-100 p-12 text-center text-gray-400 animate-pulse">
+            <div className="bg-white rounded-lg border border-gray-100 p-12 text-center text-gray-400 animate-pulse">
               Loading calendar…
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
               {/* Day headers */}
               <div className="grid grid-cols-7 border-b border-gray-100">
                 {DAY_NAMES.map(d => (
@@ -491,7 +491,7 @@ export default function AttendancePage() {
           )}
 
           {/* Legend */}
-          <div className="mt-4 bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap gap-5 items-center">
+          <div className="mt-4 bg-white rounded-lg border border-gray-100 p-4 flex flex-wrap gap-5 items-center">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Legend</span>
             {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
               <span key={key} className="flex items-center gap-1.5 text-xs">

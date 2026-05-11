@@ -124,7 +124,7 @@ export default function FeesPage() {
         </div>
         <button
           onClick={handleMakePayment}
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg shadow-lg shadow-blue-500/30 hover:bg-blue-700 transition-all flex items-center gap-2"
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2"
         >
           <FiCreditCard />
           Make Payment
@@ -133,7 +133,7 @@ export default function FeesPage() {
 
       {/* Top Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-6 rounded-xl border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-red-50 rounded-lg text-red-600">
               <FiDollarSign className="w-5 h-5" />
@@ -150,7 +150,7 @@ export default function FeesPage() {
           </p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-6 rounded-xl border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
               <FiCalendar className="w-5 h-5" />
@@ -178,7 +178,7 @@ export default function FeesPage() {
           )}
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-6 rounded-xl border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-green-50 rounded-lg text-green-600">
               <FiCreditCard className="w-5 h-5" />
@@ -197,7 +197,7 @@ export default function FeesPage() {
       </div>
 
       {/* Fee Breakdown */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Fee Breakdown</h2>
         </div>
@@ -268,7 +268,7 @@ export default function FeesPage() {
       </div>
 
       {/* Payment History */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
             Payment History

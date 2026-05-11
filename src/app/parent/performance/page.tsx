@@ -1,17 +1,13 @@
 "use client";
 
-"use client";
-
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import {
   collection,
   query,
   where,
-  getDocs,
   onSnapshot,
   addDoc,
-  orderBy,
 } from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
 import toast from "react-hot-toast";
@@ -28,7 +24,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import type { ChartOptions, ChartData } from "chart.js";
+import type { ChartData } from "chart.js";
 import { Line, Bar, Radar } from "react-chartjs-2";
 
 ChartJS.register(
@@ -56,12 +52,11 @@ interface Evaluation {
   date: string;
 }
 
-export default function PerformancePage() {
+export default function ParentPerformancePage() {
   const { user } = useAuth();
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Dynamic Stats
   const [gpa, setGpa] = useState(0);
   const [totalCredits, setTotalCredits] = useState(0);
   const [rank, setRank] = useState(0);
@@ -77,14 +72,11 @@ export default function PerformancePage() {
         (doc) => ({ id: doc.id, ...doc.data() }) as Evaluation,
       );
 
-      // Sort by date desc
       data.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
       setEvaluations(data);
 
-      // Calc Stats
-      // Mock GPA Calculation: (Score / Total) * 4
       if (data.length > 0) {
         const totalPoints = data.reduce((acc, curr) => {
           const s = curr.score || 0;
@@ -103,7 +95,6 @@ export default function PerformancePage() {
         );
         setTotalCredits(isNaN(tCredits) ? 0 : tCredits);
 
-        // Mock Rank for demo
         setRank(Math.floor(Math.random() * 10) + 1);
       } else {
         setGpa(0);
@@ -121,7 +112,6 @@ export default function PerformancePage() {
     if (!confirm("Seed performance data?")) return;
 
     try {
-      // Semesters
       const subjects = [
         "Math",
         "Physics",
@@ -156,15 +146,13 @@ export default function PerformancePage() {
     }
   };
 
-  // --- Charts Logic ---
-
-  // 1. Trend Line (Avg Score per Semester)
+  // 1. Trend Line (Avg GPA per Semester)
   const semesterGroups = evaluations.reduce((acc, curr) => {
     if (!acc[curr.semester]) acc[curr.semester] = { sum: 0, count: 0 };
-    acc[curr.semester].sum += (curr.score / curr.totalScore) * 4; // GPA scale
+    acc[curr.semester].sum += (curr.score / curr.totalScore) * 4;
     acc[curr.semester].count += 1;
     return acc;
-  }, {} as any);
+  }, {} as Record<string, { sum: number; count: number }>);
 
   const semLabels = Object.keys(semesterGroups).sort();
   const gpaTrend = semLabels.map((sem) =>
@@ -175,7 +163,7 @@ export default function PerformancePage() {
     labels: semLabels.length ? semLabels : ["Sem 1"],
     datasets: [
       {
-        label: "Your GPA",
+        label: "Ward's GPA",
         data: gpaTrend.length ? gpaTrend.map((v) => parseFloat(v)) : [0],
         borderColor: "#1f75fe",
         backgroundColor: "rgba(31, 117, 254, 0.1)",
@@ -191,7 +179,7 @@ export default function PerformancePage() {
     acc[curr.subject].sum += curr.score;
     acc[curr.subject].count += 1;
     return acc;
-  }, {} as any);
+  }, {} as Record<string, { sum: number; count: number }>);
 
   const subLabels = Object.keys(subjectGroups);
   const subScores = subLabels.map((sub) =>
@@ -209,8 +197,8 @@ export default function PerformancePage() {
     ],
   };
 
-  // 3. Radar (Recent Subject Scores) - Taking latest score for each subject
-  const latestScores: any = {};
+  // 3. Radar (Latest Score per Subject)
+  const latestScores: Record<string, Evaluation> = {};
   evaluations.forEach((ev) => {
     if (
       !latestScores[ev.subject] ||
@@ -227,14 +215,14 @@ export default function PerformancePage() {
     labels: radarLabels.length ? radarLabels : ["None"],
     datasets: [
       {
-        label: "Your Score",
+        label: "Ward's Score",
         data: radarValues.length ? radarValues : [0],
         borderColor: "#1f75fe",
         backgroundColor: "rgba(31, 117, 254, 0.2)",
         pointBackgroundColor: "#1f75fe",
       },
       {
-        label: "Class Average", // Mock Average
+        label: "Class Average",
         data: radarValues.map((v) => Math.max(0, v - 5)),
         borderColor: "#9ca3af",
         backgroundColor: "rgba(156, 163, 175, 0.2)",
@@ -245,8 +233,18 @@ export default function PerformancePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen ml-[17vw] w-[83vw]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="p-6 bg-gray-50 min-h-screen animate-pulse">
+        <div className="h-8 w-64 bg-gray-200 rounded mb-2"></div>
+        <div className="h-4 w-96 bg-gray-200 rounded mb-6"></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="h-32 bg-white rounded-lg border border-gray-100"></div>
+          <div className="h-32 bg-white rounded-lg border border-gray-100"></div>
+          <div className="h-32 bg-white rounded-lg border border-gray-100"></div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <div className="h-80 bg-white rounded-lg border border-gray-100"></div>
+          <div className="h-80 bg-white rounded-lg border border-gray-100"></div>
+        </div>
       </div>
     );
   }
@@ -254,13 +252,13 @@ export default function PerformancePage() {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="mb-6 flex justify-between items-center">
+      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            My Ward's Performance
+            My Ward&apos;s Performance
           </h1>
           <p className="text-gray-600">
-            Detailed analysis of your academic performance, trends, and
+            Detailed analysis of your ward&apos;s academic performance, trends, and
             comparisons.
           </p>
         </div>
@@ -274,9 +272,9 @@ export default function PerformancePage() {
         )}
       </div>
 
-      {/* Current Stats */}
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-6 rounded-lg border border-gray-100">
           <h3 className="text-sm font-medium text-gray-500 mb-1">
             Current GPA
           </h3>
@@ -285,13 +283,13 @@ export default function PerformancePage() {
           </p>
           <p className="text-sm text-green-600">Cumulative</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-6 rounded-lg border border-gray-100">
           <h3 className="text-sm font-medium text-gray-500 mb-1">
             Total Credits Earned
           </h3>
           <p className="text-3xl font-bold text-gray-900">{totalCredits}</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-6 rounded-lg border border-gray-100">
           <h3 className="text-sm font-medium text-gray-500 mb-1">
             Class Rank (Est.)
           </h3>
@@ -304,14 +302,14 @@ export default function PerformancePage() {
 
       {evaluations.length > 0 ? (
         <>
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          {/* Charts */}
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
+            <div className="bg-white p-6 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Performance Trend
               </h3>
               <p className="text-sm text-gray-600 mb-4">
-                Your GPA over semesters
+                Your ward&apos;s GPA over semesters
               </p>
               <div className="h-64">
                 <Line
@@ -320,7 +318,7 @@ export default function PerformancePage() {
                 />
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white p-6 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Subject Performance
               </h3>
@@ -342,12 +340,12 @@ export default function PerformancePage() {
           </div>
 
           {/* Radar Chart */}
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
+          <div className="bg-white p-6 rounded-lg border border-gray-100 mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Subject Balance
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Comparison of your latest scores against class average
+              Comparison of your ward&apos;s latest scores against class average
             </p>
             <div className="h-80">
               <Radar
@@ -361,14 +359,14 @@ export default function PerformancePage() {
             </div>
           </div>
 
-          {/* Recent Grades Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
+          {/* Recent Grades */}
+          <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">
                 Recent Grades
               </h3>
               <p className="text-sm text-gray-600 mt-1">
-                Your latest exam results
+                Your ward&apos;s latest exam results
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -426,7 +424,7 @@ export default function PerformancePage() {
           </div>
         </>
       ) : (
-        <div className="bg-white p-12 text-center rounded-lg border border-gray-200">
+        <div className="bg-white p-12 text-center rounded-lg border border-gray-100">
           <p className="text-gray-500">No performance data available yet.</p>
         </div>
       )}

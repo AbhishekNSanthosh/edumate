@@ -249,13 +249,13 @@ export default function AssignmentsPage() {
         <div className="h-4 w-64 bg-gray-100 rounded mb-8"></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-20 bg-white rounded-xl border border-gray-100"></div>
+            <div key={i} className="h-20 bg-white rounded-lg border border-gray-100"></div>
           ))}
         </div>
-        <div className="h-11 w-full bg-white border border-gray-100 rounded-xl mb-6"></div>
+        <div className="h-11 w-full bg-white border border-gray-100 rounded-lg mb-6"></div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-52 bg-white rounded-xl border border-gray-100"></div>
+            <div key={i} className="h-52 bg-white rounded-lg border border-gray-100"></div>
           ))}
         </div>
       </div>
@@ -277,7 +277,7 @@ export default function AssignmentsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
+        <div className="bg-white rounded-lg p-4 border border-gray-100">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
             Total
           </p>
@@ -285,7 +285,7 @@ export default function AssignmentsPage() {
             {assignments.length}
           </p>
         </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
+        <div className="bg-white rounded-lg p-4 border border-gray-100">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-amber-400"></div>
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
@@ -301,7 +301,7 @@ export default function AssignmentsPage() {
             </p>
           )}
         </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
+        <div className="bg-white rounded-lg p-4 border border-gray-100">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
@@ -312,7 +312,7 @@ export default function AssignmentsPage() {
             {submittedCount}
           </p>
         </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
+        <div className="bg-white rounded-lg p-4 border border-gray-100">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-blue-400"></div>
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
@@ -334,13 +334,13 @@ export default function AssignmentsPage() {
             placeholder="Search by title or course..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="All">All Status</option>
           <option value="Pending">Pending</option>
@@ -357,7 +357,7 @@ export default function AssignmentsPage() {
             return (
               <div
                 key={assignment.id}
-                className={`bg-white rounded-xl border p-5 flex flex-col h-full transition-colors ${
+                className={`bg-white rounded-lg border p-5 flex flex-col h-full transition-colors ${
                   overdue ? "border-red-200" : "border-gray-100"
                 }`}
               >
@@ -453,7 +453,7 @@ export default function AssignmentsPage() {
           })}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-gray-100 text-center">
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg border border-gray-100 text-center">
           <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
             <MdAssignment className="text-3xl text-gray-300" />
           </div>
@@ -471,7 +471,7 @@ export default function AssignmentsPage() {
       {/* Submit Assignment Modal */}
       {submitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg">
+          <div className="bg-white rounded-lg w-full max-w-lg">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">
@@ -492,7 +492,7 @@ export default function AssignmentsPage() {
 
             <div className="p-5 space-y-4">
               {/* Assignment info */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Course</span>
                   <span className="font-medium text-gray-900">
@@ -517,7 +517,7 @@ export default function AssignmentsPage() {
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition"
+                className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition"
               >
                 {selectedFile ? (
                   <div className="flex items-center justify-center gap-3">
@@ -581,14 +581,14 @@ export default function AssignmentsPage() {
               <button
                 onClick={closeSubmitModal}
                 disabled={uploading}
-                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitAssignment}
                 disabled={uploading || !selectedFile}
-                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
               >
                 {uploading ? `Uploading ${uploadProgress}%` : "Submit Assignment"}
               </button>
@@ -600,7 +600,7 @@ export default function AssignmentsPage() {
       {/* View Details Modal */}
       {detailsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
               <h2 className="text-lg font-bold text-gray-900">
                 Assignment Details
@@ -645,7 +645,7 @@ export default function AssignmentsPage() {
               </div>
 
               {/* Info grid */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 flex items-center gap-1.5">
                     <MdCalendarToday className="text-sm" /> Due Date
@@ -748,7 +748,7 @@ export default function AssignmentsPage() {
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
                     Faculty Feedback
                   </p>
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
                     <p className="text-sm text-blue-800 leading-relaxed">
                       {detailsModal.feedback}
                     </p>
@@ -761,7 +761,7 @@ export default function AssignmentsPage() {
             <div className="p-5 pt-0 flex gap-3">
               <button
                 onClick={() => setDetailsModal(null)}
-                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
               >
                 Close
               </button>
@@ -771,7 +771,7 @@ export default function AssignmentsPage() {
                     setDetailsModal(null);
                     setSubmitModal(detailsModal);
                   }}
-                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
                 >
                   Submit Assignment
                 </button>

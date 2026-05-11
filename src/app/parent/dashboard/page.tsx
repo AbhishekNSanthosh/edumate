@@ -1,84 +1,173 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../../context/AuthContext";
-import { collection, query, where, getDocs, orderBy, limit, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+} from "firebase/firestore";
 import { db } from "../../../config/firebaseConfig";
-import { FiClock, FiSpeaker, FiBarChart2, FiAlertCircle, FiCheckCircle } from "react-icons/fi";
+import Link from "next/link";
 
 export default function ParentDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  
-  // Data States
-  const [studentData, setStudentData] = useState<any>(null);
+
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [timetable, setTimetable] = useState<any | null>(null);
+  const [timetableEntries, setTimetableEntries] = useState<any[]>([]);
+  const [timetableTimings, setTimetableTimings] = useState<any[]>([]);
   const [performance, setPerformance] = useState<any[]>([]);
+  const [attendanceSummary, setAttendanceSummary] = useState<{
+    total: number;
+    present: number;
+  }>({ total: 0, present: 0 });
   const [pendingFees, setPendingFees] = useState<any[]>([]);
+
+  const [batchId, setBatchId] = useState<string>("");
+  const [batchName, setBatchName] = useState<string>("");
+  const [studentName, setStudentName] = useState<string>("");
+
+  const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  const WEEKDAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const [selectedDay, setSelectedDay] = useState(
+    WEEKDAYS.includes(today) ? today : "Monday",
+  );
 
   useEffect(() => {
     const fetchData = async () => {
       if (!user) {
-          setLoading(false);
-          return;
+        setLoading(false);
+        return;
       }
 
       try {
         setLoading(true);
 
-        // 1. Fetch Student Profile (to get Batch, Name, etc.)
+        // Fetch student doc linked to this parent (same uid)
         const studentDoc = await getDoc(doc(db, "students", user.uid));
+        let studentBatchId = "";
         if (studentDoc.exists()) {
-            setStudentData(studentDoc.data());
-        }
+          const studentData = studentDoc.data();
+          setStudentName(studentData.name || "");
+          const studentBatch = studentData.batch || "";
+          const studentDept = studentData.department || "";
 
-        // 2. Fetch Notifications (Parent-specific + personalized)
-        const [roleNotifSnap, personalNotifSnap] = await Promise.all([
-          getDocs(
-            query(
-              collection(db, "notifications"),
-              where("audience", "array-contains", "parent"),
-              limit(10),
-            ),
-          ),
-          getDocs(
-            query(
-              collection(db, "notifications"),
-              where("targetUid", "==", user.uid),
-              limit(10),
-            ),
-          ),
-        ]);
-        const notifMap = new Map<string, any>();
-        [...roleNotifSnap.docs, ...personalNotifSnap.docs].forEach((d) =>
-          notifMap.set(d.id, { id: d.id, ...d.data() }),
-        );
-        const sortedNotifs = Array.from(notifMap.values())
-          .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
-          .slice(0, 3);
-        setNotifications(sortedNotifs);
-
-        // 3. Fetch Fees (For Reminders)
-        const feeQuery = query(collection(db, "fees"), where("studentId", "==", user.uid), where("status", "in", ["pending", "overdue"]));
-        const feeSnap = await getDocs(feeQuery);
-        setPendingFees(feeSnap.docs.map(d => d.data()));
-
-        // 4. Fetch Performance
-        const performanceQuery = query(collection(db, "evaluation_reports"), where("studentId", "==", user.uid));
-        const performanceSnap = await getDocs(performanceQuery);
-        setPerformance(performanceSnap.docs.map(d => d.data()));
-
-        // 5. Fetch Timetable (if batch is available)
-        const batch = studentDoc.data()?.batch;
-        if (batch) {
-            const timetableQuery = query(collection(db, "timetables"), where("batch", "==", batch));
-            const timetableSnap = await getDocs(timetableQuery);
-            if (!timetableSnap.empty) {
-                setTimetable(timetableSnap.docs[0].data());
+          if (studentBatch) {
+            const batchSnap = await getDocs(collection(db, "batches"));
+            const matchedBatch = batchSnap.docs.find((d) => {
+              const bName = d.data().name || "";
+              return (
+                bName === studentBatch ||
+                bName === `${studentDept} ${studentBatch}` ||
+                bName.includes(studentBatch)
+              );
+            });
+            if (matchedBatch) {
+              studentBatchId = matchedBatch.id;
+              setBatchId(studentBatchId);
+              setBatchName(matchedBatch.data().name || studentBatch);
+            } else {
+              setBatchName(
+                studentDept ? `${studentDept} ${studentBatch}` : studentBatch,
+              );
             }
+          }
         }
 
+        // Notifications for parent audience
+        const roleQuery = query(
+          collection(db, "notifications"),
+          where("audience", "array-contains", "parent"),
+          limit(20),
+        );
+        const personalQuery = query(
+          collection(db, "notifications"),
+          where("targetUid", "==", user.uid),
+          limit(10),
+        );
+
+        const [roleSnap, personalSnap] = await Promise.all([
+          getDocs(roleQuery),
+          getDocs(personalQuery),
+        ]);
+
+        const map = new Map<string, any>();
+        [...roleSnap.docs, ...personalSnap.docs].forEach((d) =>
+          map.set(d.id, { id: d.id, ...d.data() }),
+        );
+        const filteredNotifs = Array.from(map.values())
+          .filter((n: any) => {
+            if (n.targetUid && n.targetUid !== user.uid) return false;
+            if (n.audience) {
+              return (
+                n.audience.includes("parent") || n.audience.includes("all")
+              );
+            }
+            return n.targetUid === user.uid;
+          })
+          .sort((a: any, b: any) => {
+            const tA =
+              a.createdAt?.seconds ||
+              new Date(a.createdAt || 0).getTime() / 1000;
+            const tB =
+              b.createdAt?.seconds ||
+              new Date(b.createdAt || 0).getTime() / 1000;
+            return tB - tA;
+          })
+          .slice(0, 5);
+
+        setNotifications(filteredNotifs);
+
+        // Attendance summary
+        const attendanceQuery = query(
+          collection(db, "attendance"),
+          where("studentId", "==", user.uid),
+        );
+        const attendanceSnap = await getDocs(attendanceQuery);
+        const attendanceRecords = attendanceSnap.docs.map((d) => d.data());
+        const presentCount = attendanceRecords.filter(
+          (r) => r.status === "present" || r.status === "Present",
+        ).length;
+        setAttendanceSummary({
+          total: attendanceRecords.length,
+          present: presentCount,
+        });
+
+        // Pending fees
+        const feeQuery = query(
+          collection(db, "fees"),
+          where("studentId", "==", user.uid),
+          where("status", "in", ["pending", "overdue"]),
+        );
+        const feeSnap = await getDocs(feeQuery);
+        setPendingFees(feeSnap.docs.map((d) => d.data()));
+
+        // Timetable
+        if (studentBatchId) {
+          const timetableDoc = await getDoc(
+            doc(db, "timetables", studentBatchId),
+          );
+          if (timetableDoc.exists()) {
+            const ttData = timetableDoc.data();
+            setTimetableEntries(ttData.entries || []);
+            setTimetableTimings(ttData.timings || []);
+          }
+        }
+
+        // Performance
+        const performanceQuery = query(
+          collection(db, "evaluation_reports"),
+          where("studentId", "==", user.uid),
+        );
+        const performanceSnap = await getDocs(performanceQuery);
+        setPerformance(performanceSnap.docs.map((d) => d.data()));
       } catch (error) {
         console.error("Error fetching parent dashboard data", error);
       } finally {
@@ -89,223 +178,694 @@ export default function ParentDashboard() {
     fetchData();
   }, [user]);
 
-  const renderTimetable = () => {
-      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-      const scheduleData = timetable?.schedule || {};
+  const getEntryForSlot = (day: string, time: string) => {
+    return timetableEntries.find((e: any) => e.day === day && e.time === time);
+  };
 
-      return days.map((day, i) => {
-          const slots = scheduleData[day] || Array(8).fill('-');
-          return (
-            <tr key={i} className="hover:bg-gray-50 transition-colors">
-              <td className="px-4 py-3 font-medium text-gray-900 bg-gray-50">{day}</td>
-              {slots.map((cell: string, j: number) => (
-                <td key={j} className="px-3 py-3 text-center text-gray-700">
-                  <span className={`inline-block px-2 py-1 text-xs rounded-md ${cell === 'Lunch' ? 'bg-gray-200 text-gray-600' : 'bg-azure-50 text-azure-700'}`}>
-                    {cell}
-                  </span>
-                </td>
-              ))}
-            </tr>
-          );
-      });
-  }
+  const classTimings = timetableTimings.filter((t: any) => t.type === "class");
+  const allTimings = timetableTimings;
+  const hasTimetable = timetableEntries.length > 0 && classTimings.length > 0;
+
+  const todayClasses = useMemo(() => {
+    if (!hasTimetable) return [];
+    return allTimings
+      .map((slot: any) => {
+        if (slot.type === "interval") return { ...slot, isBreak: true };
+        const entry = getEntryForSlot(today, slot.time);
+        return entry ? { ...entry, timing: slot.time } : null;
+      })
+      .filter(Boolean);
+  }, [timetableEntries, timetableTimings, today]);
+
+  const currentSlot = useMemo(() => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (const slot of allTimings) {
+      if (slot.type === "interval") continue;
+      const parts = slot.time.split(" - ");
+      if (parts.length !== 2) continue;
+
+      const parseTime = (t: string) => {
+        const match = t.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!match) return 0;
+        let h = parseInt(match[1]);
+        const m = parseInt(match[2]);
+        const ampm = match[3].toUpperCase();
+        if (ampm === "PM" && h < 12) h += 12;
+        if (ampm === "AM" && h === 12) h = 0;
+        return h * 60 + m;
+      };
+
+      const start = parseTime(parts[0]);
+      const end = parseTime(parts[1]);
+      if (currentMinutes >= start && currentMinutes < end) {
+        return slot.time;
+      }
+    }
+    return null;
+  }, [timetableTimings]);
+
+  const subjectColors: Record<string, { bg: string; text: string }> = {};
+  const colorPalette = [
+    { bg: "bg-blue-50", text: "text-blue-700" },
+    { bg: "bg-violet-50", text: "text-violet-700" },
+    { bg: "bg-emerald-50", text: "text-emerald-700" },
+    { bg: "bg-amber-50", text: "text-amber-700" },
+    { bg: "bg-rose-50", text: "text-rose-700" },
+    { bg: "bg-cyan-50", text: "text-cyan-700" },
+    { bg: "bg-orange-50", text: "text-orange-700" },
+    { bg: "bg-teal-50", text: "text-teal-700" },
+  ];
+  let colorIdx = 0;
+  timetableEntries.forEach((e: any) => {
+    if (e.subject && !subjectColors[e.subject]) {
+      subjectColors[e.subject] = colorPalette[colorIdx % colorPalette.length];
+      colorIdx++;
+    }
+  });
+
+  const getSubjectColor = (subject: string) =>
+    subjectColors[subject] || colorPalette[0];
+
+  const formatTimeShort = (time: string) => {
+    const part = time.split(" - ")[0]?.trim() || time;
+    return part.replace(/:00/g, "").replace(/\s+/g, "");
+  };
 
   if (loading) {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    return (
+      <div className="w-full p-3 sm:p-4 md:p-6 bg-gray-50/50 min-h-screen">
+        <div className="max-w-7xl mx-auto animate-pulse">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-3 sm:gap-4">
+            <div>
+              <div className="h-7 sm:h-8 w-44 sm:w-56 bg-gray-200 rounded-lg mb-3"></div>
+              <div className="h-4 w-36 sm:w-40 bg-gray-200 rounded-lg"></div>
+            </div>
+            <div className="h-10 w-32 sm:w-36 bg-gray-200 rounded-lg"></div>
+          </div>
+          <div className="bg-white rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
+            <div className="h-5 sm:h-6 w-36 sm:w-40 bg-gray-200 rounded-lg mb-4"></div>
+            <div className="flex gap-3 overflow-hidden">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-24 w-36 sm:w-48 bg-gray-100 rounded-lg shrink-0"></div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 sm:p-6 mb-4 sm:mb-6">
+            <div className="h-5 sm:h-6 w-40 sm:w-48 bg-gray-200 rounded-lg mb-4"></div>
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-12 w-full bg-gray-100 rounded-lg"></div>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className={`bg-white rounded-lg h-56 p-4 sm:p-6${i === 2 ? " sm:col-span-2 lg:col-span-1" : ""}`}>
+                <div className="h-5 sm:h-6 w-28 sm:w-32 bg-gray-200 rounded-lg mb-4"></div>
+                <div className="space-y-3">
+                  <div className="h-10 w-full bg-gray-100 rounded-lg"></div>
+                  <div className="h-10 w-full bg-gray-100 rounded-lg"></div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      );
+      </div>
+    );
   }
 
   return (
-    <div className="w-full p-4 md:p-6 bg-gray-50 min-h-screen">
+    <div className="w-full p-3 sm:p-4 md:p-6 bg-gray-50/50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Dashboard Overview
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+              Dashboard
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Tracking progress for <span className="font-semibold text-gray-700">{studentData?.name || user?.displayName || "Student"}</span>
+              Tracking progress for{" "}
+              <span className="font-semibold text-gray-700">
+                {studentName || user?.displayName || "Student"}
+              </span>
             </p>
           </div>
-          <div className="text-right">
-            {studentData?.batch && (
-                <span className="bg-azure-50 text-azure-700 px-3 py-1 rounded-full text-sm font-medium border border-azure-100">
-                Batch: {studentData.batch}
+          {batchName && (
+            <span className="inline-flex items-center gap-2 text-gray-600 pl-3 pr-4 py-2 rounded-lg text-sm font-medium bg-gray-100">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              {batchName}
+            </span>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mb-4 sm:mb-6">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Quick Actions
+          </h2>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3">
+            {[
+              { label: "Attendance", emoji: "📊", href: "/parent/attendance" },
+              { label: "Assignments", emoji: "📝", href: "/parent/assignments" },
+              { label: "Results", emoji: "🎯", href: "/parent/university-results" },
+              { label: "Timetable", emoji: "📅", href: "#timetable" },
+              { label: "Notifications", emoji: "🔔", href: "#announcements" },
+              { label: "Profile", emoji: "👤", href: "/parent/my-profile" },
+            ].map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                scroll={action.href.startsWith("#")}
+                className="flex flex-col items-center justify-center gap-2 p-3 sm:p-4 bg-white rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm transition-all group"
+              >
+                <span className="text-2xl sm:text-3xl group-hover:scale-110 transition-transform">
+                  {action.emoji}
                 </span>
-            )}
+                <span className="text-[11px] sm:text-xs font-medium text-gray-600 group-hover:text-blue-700 text-center leading-tight">
+                  {action.label}
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
 
-        {/* Top Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Time Table */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FiClock className="text-blue-600"/>
-                Class Schedule
-              </h2>
-              {!timetable && <span className="text-xs text-red-400 bg-red-50 px-2 py-1 rounded">No Schedule Found</span>}
+        {/* Today's Schedule - Hero Card */}
+        {WEEKDAYS.includes(today) && hasTimetable && (
+          <div className="bg-white rounded-lg mb-4 sm:mb-6 overflow-hidden">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  Today&apos;s Schedule
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">{today}</p>
+              </div>
+              {currentSlot && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Live
+                </span>
+              )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-700 border-b border-gray-200">Day</th>
-                    {Array.from({length: 8}, (_, i) => (
-                        <th key={i} className="px-3 py-3 text-center font-medium text-gray-700 border-b border-gray-200">H{i+1}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                    {timetable ? renderTimetable() : (
-                        <tr>
-                            <td colSpan={9} className="p-6 text-center text-gray-400">
-                                Schedule not available for {studentData?.batch || "this batch"}.
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-              </table>
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+              <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory scrollbar-hide">
+                {todayClasses.length > 0 ? (
+                  todayClasses.map((cls: any, i: number) => {
+                    if (cls.isBreak) {
+                      return (
+                        <div
+                          key={`break-${i}`}
+                          className="shrink-0 snap-start flex items-center justify-center w-16 sm:w-20 self-stretch"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="w-px h-4 bg-gray-200"></div>
+                            <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">
+                              {cls.label || "Break"}
+                            </span>
+                            <div className="w-px h-4 bg-gray-200"></div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const isNow = currentSlot === cls.timing;
+                    const color = getSubjectColor(cls.subject);
+
+                    return (
+                      <div
+                        key={cls.id || i}
+                        className={`shrink-0 snap-start w-36 sm:w-44 rounded-lg p-3 sm:p-3.5 transition-all ${
+                          isNow ? "bg-blue-600 text-white" : color.bg
+                        }`}
+                      >
+                        <div className={`text-[11px] font-medium mb-1.5 sm:mb-2 ${isNow ? "text-blue-100" : "text-gray-400"}`}>
+                          {formatTimeShort(cls.timing)}
+                        </div>
+                        <div className={`text-xs sm:text-sm font-semibold mb-1 leading-tight ${isNow ? "text-white" : color.text}`}>
+                          {cls.subject}
+                        </div>
+                        <div className={`text-xs ${isNow ? "text-blue-100" : "text-gray-500"}`}>
+                          {cls.faculty}
+                        </div>
+                        {cls.room && (
+                          <div className={`text-[11px] mt-1 ${isNow ? "text-blue-200" : "text-gray-400"}`}>
+                            {cls.room}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="w-full py-6 text-center text-sm text-gray-400">
+                    No classes scheduled today
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        )}
 
+        {/* Full Week Timetable */}
+        <div id="timetable" className="bg-white rounded-lg mb-4 sm:mb-6 overflow-hidden">
+          <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-gray-900">
+              Weekly Timetable
+            </h2>
+            {!hasTimetable && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
+                {!batchId ? "No batch assigned" : "Timetable not set up"}
+              </span>
+            )}
+          </div>
+
+          {hasTimetable && (
+            <>
+              {/* Day Tabs - mobile */}
+              <div className="px-4 sm:px-5 pb-3 md:hidden">
+                <div className="flex gap-1 sm:gap-1.5 bg-gray-100 p-1 rounded-lg">
+                  {WEEKDAYS.map((day, i) => (
+                    <button
+                      key={day}
+                      onClick={() => setSelectedDay(day)}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                        selectedDay === day
+                          ? "bg-white text-gray-900"
+                          : day === today
+                            ? "text-blue-600"
+                            : "text-gray-500"
+                      }`}
+                    >
+                      {WEEKDAYS_SHORT[i]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mobile: Selected Day View */}
+              <div className="md:hidden px-3 sm:px-4 pb-4 sm:pb-5">
+                <div className="space-y-2">
+                  {allTimings.map((slot: any, idx: number) => {
+                    if (slot.type === "interval") {
+                      return (
+                        <div key={slot.id || idx} className="flex items-center gap-3 py-2 px-1">
+                          <div className="w-16"></div>
+                          <div className="flex-1 flex items-center gap-2">
+                            <div className="flex-1 h-px bg-gray-200"></div>
+                            <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+                              {slot.label || "Break"}
+                            </span>
+                            <div className="flex-1 h-px bg-gray-200"></div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const entry = getEntryForSlot(selectedDay, slot.time);
+                    const isNow = selectedDay === today && currentSlot === slot.time;
+                    const color = entry ? getSubjectColor(entry.subject) : null;
+
+                    return (
+                      <div
+                        key={slot.id || idx}
+                        className={`flex items-stretch gap-3 rounded-lg transition-all ${
+                          isNow ? "ring-2 ring-blue-500 ring-offset-2" : ""
+                        }`}
+                      >
+                        <div className="w-14 sm:w-16 shrink-0 flex flex-col justify-center py-3">
+                          <span className="text-[11px] font-semibold text-gray-500 leading-tight">
+                            {formatTimeShort(slot.time.split(" - ")[0])}
+                          </span>
+                          <span className="text-[10px] text-gray-300 leading-tight">
+                            {formatTimeShort(slot.time.split(" - ")[1])}
+                          </span>
+                        </div>
+
+                        {entry ? (
+                          <div className={`flex-1 ${color!.bg} rounded-lg p-3.5`}>
+                            <div className={`text-sm font-semibold ${color!.text} leading-tight`}>
+                              {entry.subject}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1.5">
+                              <span className="text-xs text-gray-500">{entry.faculty}</span>
+                              {entry.room && (
+                                <>
+                                  <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                  <span className="text-xs text-gray-400">{entry.room}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 bg-gray-50 rounded-lg p-3.5 flex items-center">
+                            <span className="text-xs text-gray-300">Free period</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Desktop: Full Week Grid */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider w-36">
+                        Time
+                      </th>
+                      {WEEKDAYS.map((day) => (
+                        <th
+                          key={day}
+                          className={`px-2 py-3 text-center text-[11px] font-semibold uppercase tracking-wider ${
+                            day === today ? "text-blue-600" : "text-gray-400"
+                          }`}
+                        >
+                          <span className="inline-flex items-center gap-1.5">
+                            {day.substring(0, 3)}
+                            {day === today && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            )}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allTimings.map((slot: any, idx: number) => {
+                      if (slot.type === "interval") {
+                        return (
+                          <tr key={slot.id || idx}>
+                            <td className="px-4 py-1.5 text-[10px] font-medium text-gray-400">
+                              {slot.time}
+                            </td>
+                            <td colSpan={5} className="px-4 py-1.5 text-center">
+                              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">
+                                {slot.label || "Break"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return (
+                        <tr key={slot.id || idx}>
+                          <td className="px-4 py-2.5 align-top">
+                            <div className="text-[11px] font-medium text-gray-500 leading-tight whitespace-nowrap">
+                              {slot.time.split(" - ")[0]}
+                            </div>
+                            <div className="text-[10px] text-gray-300 leading-tight">
+                              {slot.time.split(" - ")[1]}
+                            </div>
+                          </td>
+                          {WEEKDAYS.map((day) => {
+                            const entry = getEntryForSlot(day, slot.time);
+                            const isNow = day === today && currentSlot === slot.time;
+                            const isToday = day === today;
+
+                            if (!entry) {
+                              return (
+                                <td
+                                  key={day}
+                                  className={`px-1.5 py-1.5 text-center ${isToday ? "bg-blue-50/10" : ""}`}
+                                >
+                                  <div className="h-full min-h-[3.5rem] rounded-lg"></div>
+                                </td>
+                              );
+                            }
+
+                            const color = getSubjectColor(entry.subject);
+
+                            return (
+                              <td
+                                key={day}
+                                className={`px-1.5 py-1.5 ${isToday ? "bg-blue-50/10" : ""}`}
+                              >
+                                <div
+                                  className={`rounded-lg p-2.5 min-h-[3.5rem] transition-all ${
+                                    isNow ? "bg-blue-600 text-white" : color.bg
+                                  }`}
+                                >
+                                  <div
+                                    className={`text-xs font-semibold leading-tight ${
+                                      isNow ? "text-white" : color.text
+                                    }`}
+                                  >
+                                    {entry.subject}
+                                  </div>
+                                  <div
+                                    className={`text-[10px] mt-1 leading-tight ${
+                                      isNow ? "text-blue-100" : "text-gray-500"
+                                    }`}
+                                  >
+                                    {entry.faculty}
+                                  </div>
+                                  {entry.room && (
+                                    <div
+                                      className={`text-[10px] mt-0.5 ${
+                                        isNow ? "text-blue-200" : "text-gray-400"
+                                      }`}
+                                    >
+                                      {entry.room}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {!hasTimetable && (
+            <div className="px-4 sm:px-5 pb-8 pt-2">
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="w-14 h-14 rounded-lg bg-gray-50 flex items-center justify-center mb-4 text-2xl">
+                  📅
+                </div>
+                <p className="text-sm font-medium text-gray-500 mb-1">
+                  No timetable available
+                </p>
+                <p className="text-xs text-gray-400 max-w-xs">
+                  {!batchId
+                    ? "Batch hasn't been assigned yet. Contact the admin."
+                    : "The batch timetable hasn't been set up yet."}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Announcements */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden lg:col-span-1">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FiSpeaker className="text-yellow-600"/>
+          <div id="announcements" className="bg-white rounded-lg overflow-hidden">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+              <h2 className="text-base font-semibold text-gray-900">
                 Announcements
               </h2>
             </div>
-            <div className="p-4 space-y-4">
-              {notifications.length > 0 ? notifications.map((notif: any) => (
-                  <div key={notif.id} className="space-y-1 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
-                      <span className="font-medium text-gray-900 text-sm line-clamp-1">
-                        {notif.title}
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2.5 max-h-72 sm:max-h-80 overflow-y-auto">
+              {notifications.length > 0 ? (
+                notifications.map((notif: any) => {
+                  const date = notif.createdAt?.toDate
+                    ? notif.createdAt.toDate()
+                    : notif.createdAt
+                      ? new Date(notif.createdAt)
+                      : null;
+                  const formattedDate = date
+                    ? date.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : null;
+
+                  return (
+                    <div key={notif.id} className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-start gap-2.5">
+                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 shrink-0"></span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-900 leading-tight truncate">
+                              {notif.title}
+                            </p>
+                            {formattedDate && (
+                              <span className="text-[10px] text-gray-400 shrink-0">
+                                {formattedDate}
+                              </span>
+                            )}
+                          </div>
+                          {notif.message && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                              {notif.message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-gray-400">No announcements yet</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Performance */}
+          <div className="bg-white rounded-lg overflow-hidden">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+              <h2 className="text-base font-semibold text-gray-900">
+                Performance
+              </h2>
+            </div>
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+              {performance.length > 0 ? (
+                <div className="space-y-3.5">
+                  {performance.slice(0, 5).map((item, i) => {
+                    const barColors = [
+                      "bg-blue-500",
+                      "bg-violet-500",
+                      "bg-emerald-500",
+                      "bg-amber-500",
+                      "bg-rose-500",
+                    ];
+                    const pct = item.percentage || 0;
+                    return (
+                      <div key={i}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-medium text-gray-700 truncate max-w-[60%]">
+                            {item.subject}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {item.overallGrade && (
+                              <span className="text-[10px] text-gray-400">
+                                {item.overallGrade}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold text-gray-900">
+                              {pct}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${barColors[i % barColors.length]}`}
+                            style={{ width: `${pct}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-gray-400">
+                    No evaluations published yet
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Info */}
+          <div className="bg-white rounded-lg overflow-hidden sm:col-span-2 lg:col-span-1">
+            <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+              <h2 className="text-base font-semibold text-gray-900">
+                Quick Info
+              </h2>
+            </div>
+            <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2.5">
+              {/* Attendance overview */}
+              {attendanceSummary.total > 0 && (
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-900">
+                      Attendance
+                    </span>
+                    <span
+                      className={`text-xs font-semibold ${
+                        (attendanceSummary.present / attendanceSummary.total) * 100 >= 75
+                          ? "text-emerald-600"
+                          : "text-amber-600"
+                      }`}
+                    >
+                      {Math.round(
+                        (attendanceSummary.present / attendanceSummary.total) * 100,
+                      )}
+                      %
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        (attendanceSummary.present / attendanceSummary.total) * 100 >= 75
+                          ? "bg-emerald-500"
+                          : "bg-amber-500"
+                      }`}
+                      style={{
+                        width: `${Math.round(
+                          (attendanceSummary.present / attendanceSummary.total) * 100,
+                        )}%`,
+                      }}
+                    ></div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1.5">
+                    {attendanceSummary.present} of {attendanceSummary.total} classes
+                  </p>
+                </div>
+              )}
+
+              {/* Fee alerts */}
+              {pendingFees.length > 0 ? (
+                pendingFees.slice(0, 2).map((fee, idx) => (
+                  <div key={idx} className="p-3 rounded-lg bg-red-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        <span className="text-xs font-semibold text-gray-900">
+                          Fee Pending
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-red-700 bg-red-100">
+                        {fee.status}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 pl-3.5">
-                      {notif.createdAt?.toDate ? notif.createdAt.toDate().toLocaleDateString() : 'Recent'}
-                    </p>
-                    <p className="text-xs text-gray-600 pl-3.5 line-clamp-2">{notif.message}</p>
+                    {fee.item && (
+                      <p className="text-[11px] text-gray-500 mt-1.5 pl-4 line-clamp-1">
+                        {fee.item}
+                        {fee.amount ? ` — ₹${fee.amount}` : ""}
+                      </p>
+                    )}
                   </div>
-              )) : (
-                  <p className="text-center text-gray-400 text-sm py-4">No new notices for parents.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Performance */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sm:col-span-2 lg:col-span-1">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FiBarChart2 className="text-green-600"/>
-                Academic Performance
-              </h2>
-            </div>
-            <div className="p-6">
-               {performance.length > 0 ? (
-                    <div className="grid grid-cols-5 gap-2 h-48">
-                        {performance.map((item, i) => (
-                        <div key={i} className="relative h-full w-full flex flex-col items-center justify-end">
-                            <div
-                            className={`${item.color || 'bg-blue-500'} absolute bottom-0 left-0 right-0 rounded-t-md transition-all duration-300`}
-                            style={{ height: `${item.percentage || 0}%` }}
-                            ></div>
-                            <span className="text-[10px] text-gray-600 mt-2 font-medium relative z-10 truncate w-full text-center" title={item.subject}>
-                            {item.subject.substring(0, 3).toUpperCase()}
-                            </span>
-                            <span className="text-[10px] text-gray-500 relative z-10">
-                            {item.percentage}%
-                            </span>
-                        </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-                        No recent exam data available.
-                    </div>
-                )}
-            </div>
-          </div>
-
-          {/* Reminders / Status */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FiAlertCircle className="text-red-600"/>
-                Status & Alerts
-              </h2>
-            </div>
-            <div className="p-4 space-y-4">
-              {pendingFees.length > 0 ? (
-                  pendingFees.map((fee, idx) => (
-                    <div key={idx} className="flex items-start gap-3 p-3 bg-red-50 rounded-lg">
-                        <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
-                        <div>
-                        <p className="text-sm font-medium text-gray-900">
-                            Fee Pending: {fee.item}
-                        </p>
-                        <p className="text-xs text-red-700">
-                            Amount: ₹{fee.amount} • Due: {fee.dueDate?.toDate().toLocaleDateString()}
-                        </p>
-                        </div>
-                    </div>
-                  ))
+                ))
               ) : (
-                   <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-                        <FiCheckCircle className="text-green-600 mt-0.5"/>
-                        <div>
-                        <p className="text-sm font-medium text-gray-900">
-                            No Pending Dues
-                        </p>
-                        <p className="text-xs text-green-700">
-                            All fees are paid up to date.
-                        </p>
-                        </div>
-                    </div>
+                <div className="p-3 rounded-lg bg-emerald-50">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-xs font-semibold text-gray-900">
+                      No Pending Dues
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 mt-1.5 pl-4">
+                    All fees are paid up to date.
+                  </p>
+                </div>
               )}
-              
-              {/* Absences Alert logic could go here */}
-            </div>
-          </div>
 
-          {/* Attendance Summary (Mocked from performance for now) */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FiCheckCircle className="text-blue-600"/>
-                Attendance Summary
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="text-4xl font-bold text-gray-900 mb-2">92%</div>
-              <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300"
-                  style={{ width: "92%" }}
-                ></div>
-              </div>
-              <div className="space-y-2 text-sm max-h-[150px] overflow-y-auto">
-                 {performance.length > 0 ? performance.slice(0, 5).map((p, i) => (
-                     <div key={i} className="flex justify-between">
-                        <span className="text-gray-600 truncate w-32">{p.subject}</span>
-                        <span className="font-medium text-green-600">Present</span>
-                     </div>
-                 )) : (
-                     <p className="text-gray-400 text-xs italic">Subject-wise attendance will appear here.</p>
-                 )}
-              </div>
+              {/* Fallback when nothing to show */}
+              {attendanceSummary.total === 0 && pendingFees.length === 0 && (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-gray-400">Nothing to show yet</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

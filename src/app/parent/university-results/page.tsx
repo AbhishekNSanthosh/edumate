@@ -35,13 +35,13 @@ export default function UniversityResultsPage() {
     if (!user) return;
 
     const q = query(collection(db, "evaluation_reports"), where("studentId", "==", user.uid));
-    
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         } as Result));
-        
+
         // Sort by date descending
         data.sort((a,b) => {
             const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
@@ -160,16 +160,18 @@ export default function UniversityResultsPage() {
       }
   };
 
-  if (loading) {
+    if (loading) {
       return (
-          <div className="flex justify-center items-center min-h-screen ml-[17vw] w-[83vw]">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="p-6 bg-gray-50 min-h-screen animate-pulse">
+              <div className="h-8 w-48 bg-gray-200 rounded mb-6"></div>
+              <div className="h-12 w-64 bg-white border border-gray-100 rounded-lg mb-6"></div>
+              <div className="h-64 bg-white rounded-lg border border-gray-100"></div>
           </div>
       );
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen  print:mt-0 print:bg-white">
+    <div className="p-6 bg-gray-50 min-h-screen print:mt-0 print:bg-white">
       {/* Header */}
       <h1 className="text-2xl font-bold text-gray-900 mb-6 print:hidden">University Results</h1>
       <div className="hidden print:block mb-8 text-center">
@@ -179,7 +181,7 @@ export default function UniversityResultsPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 print:grid-cols-3">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-center print:border-none print:shadow-none">
+        <div className="bg-white p-6 rounded-lg border border-gray-100 text-center print:border-none print:-none">
           <div className="flex justify-center mb-3">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center print:hidden">
               <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,7 +194,7 @@ export default function UniversityResultsPage() {
           <p className="text-xs text-gray-600 print:hidden">Overall academic performance.</p>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-center print:border-none print:shadow-none">
+        <div className="bg-white p-6 rounded-lg border border-gray-100 text-center print:border-none print:-none">
           <div className="flex justify-center mb-3">
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center print:hidden">
               <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -205,7 +207,7 @@ export default function UniversityResultsPage() {
           <p className="text-xs text-gray-600 print:hidden">Credits successfully completed.</p>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-center print:border-none print:shadow-none">
+        <div className="bg-white p-6 rounded-lg border border-gray-100 text-center print:border-none print:-none">
           <div className="flex justify-center mb-3">
             <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center print:hidden">
               <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,9 +222,9 @@ export default function UniversityResultsPage() {
       </div>
 
       {/* Search and Download */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6 print:hidden">
+      <div className="bg-white rounded-lg border border-gray-100 p-6 mb-6 print:hidden">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative flex-1 max-w-md w-full">
+          <div className="relative flex-1 w-full w-full">
             <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
@@ -250,8 +252,8 @@ export default function UniversityResultsPage() {
       </div>
 
       {/* Results Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print:border-none print:shadow-none">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 print:bg-white print:border-b-2 print:border-black">
+      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden print:border-none print:-none">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 print:bg-white print:border-b-2 print:border-black">
           <h3 className="text-lg font-semibold text-gray-900">Exam Results</h3>
         </div>
         <div className="overflow-x-auto">
@@ -279,7 +281,7 @@ export default function UniversityResultsPage() {
                   }
 
                   return (
-                    <tr key={result.id} className="hover:bg-gray-50 print:hover:bg-white border-b print:border-gray-200">
+                    <tr key={result.id} className="hover:bg-gray-50 print:hover:bg-white border-b print:border-gray-100">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{result.semester}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{result.exam || result['subject'] || 'Unknown'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{date.toLocaleDateString()}</td>

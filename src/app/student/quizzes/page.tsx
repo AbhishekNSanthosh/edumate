@@ -230,7 +230,7 @@ export default function StudentQuizPage() {
                   : "—",
             },
           ].map((s) => (
-            <div key={s.label} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
+            <div key={s.label} className="bg-white rounded-lg p-4 border border-gray-100 text-center">
               <p className="text-xs text-gray-500 font-medium">{s.label}</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
             </div>
@@ -245,14 +245,14 @@ export default function StudentQuizPage() {
             placeholder="Search quizzes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-white rounded-xl p-5 border border-gray-100 animate-pulse h-36" />
+              <div key={i} className="bg-white rounded-lg p-5 border border-gray-100 animate-pulse h-36" />
             ))}
           </div>
         ) : filtered.length > 0 ? (
@@ -263,7 +263,7 @@ export default function StudentQuizPage() {
               return (
                 <div
                   key={quiz.id}
-                  className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-shadow"
+                  className="bg-white rounded-lg border border-gray-100 p-5 transition-colors"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-semibold text-gray-900">{quiz.title}</h3>
@@ -312,7 +312,7 @@ export default function StudentQuizPage() {
                   ) : (
                     <button
                       onClick={() => startQuiz(quiz)}
-                      className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition shadow-sm shadow-purple-200"
+                      className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
                     >
                       Start Quiz →
                     </button>
@@ -322,7 +322,7 @@ export default function StudentQuizPage() {
             })}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-gray-100">
+          <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg border border-gray-100">
             <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mb-4">
               <MdQuiz className="text-4xl text-purple-400" />
             </div>
@@ -343,7 +343,7 @@ export default function StudentQuizPage() {
     return (
       <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
         {/* Header */}
-        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 flex items-center justify-between shadow-sm">
+        <div className="bg-white rounded-lg border border-gray-100 p-4 mb-6 flex items-center justify-between">
           <div>
             <h2 className="font-bold text-gray-900">{activeQuiz.title}</h2>
             <p className="text-xs text-gray-500">
@@ -351,7 +351,7 @@ export default function StudentQuizPage() {
             </p>
           </div>
           <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono font-bold text-lg ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-mono font-bold text-lg ${
               isLowTime
                 ? "bg-red-100 text-red-600 animate-pulse"
                 : "bg-purple-50 text-purple-700"
@@ -371,7 +371,7 @@ export default function StudentQuizPage() {
         </div>
 
         {/* Question */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm mb-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-6 mb-4">
           <div className="flex items-start gap-3 mb-6">
             <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2.5 py-1.5 rounded-lg flex-shrink-0">
               Q{currentQuestion + 1}
@@ -390,7 +390,7 @@ export default function StudentQuizPage() {
                   newAnswers[currentQuestion] = i;
                   setAnswers(newAnswers);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all text-left ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-all text-left ${
                   answers[currentQuestion] === i
                     ? "border-purple-500 bg-purple-50 text-purple-900"
                     : "border-gray-100 hover:border-gray-300 text-gray-700"
@@ -431,7 +431,7 @@ export default function StudentQuizPage() {
           <button
             onClick={() => setCurrentQuestion((p) => Math.max(0, p - 1))}
             disabled={currentQuestion === 0}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-40"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-40"
           >
             <MdArrowBack /> Previous
           </button>
@@ -439,7 +439,7 @@ export default function StudentQuizPage() {
           {currentQuestion < activeQuiz.questions.length - 1 ? (
             <button
               onClick={() => setCurrentQuestion((p) => p + 1)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
             >
               Next <MdArrowForward />
             </button>
@@ -447,7 +447,7 @@ export default function StudentQuizPage() {
             <button
               onClick={() => handleSubmit()}
               disabled={submitting}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition shadow-lg shadow-green-200 disabled:opacity-60"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-60"
             >
               <MdSend /> {submitting ? "Submitting..." : "Submit Quiz"}
             </button>
@@ -473,7 +473,7 @@ export default function StudentQuizPage() {
       <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
         {/* Result Card */}
         <div className="max-w-2xl mx-auto">
-          <div className={`${grade.bg} rounded-2xl p-8 text-center mb-6 border border-gray-100`}>
+          <div className={`${grade.bg} rounded-lg p-8 text-center mb-6 border border-gray-100`}>
             <MdWorkspacePremium className={`text-6xl ${grade.color} mx-auto mb-3`} />
             <h2 className={`text-3xl font-bold ${grade.color}`}>{grade.label}</h2>
             <p className="text-gray-600 mt-2">{activeQuiz.title}</p>
@@ -486,7 +486,7 @@ export default function StudentQuizPage() {
           </div>
 
           {/* Answers Review */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm mb-4">
+          <div className="bg-white rounded-lg border border-gray-100 p-6 mb-4">
             <h3 className="font-bold text-gray-900 mb-4">Answer Review</h3>
             <div className="space-y-4">
               {activeQuiz.questions.map((q, i) => {
@@ -494,7 +494,7 @@ export default function StudentQuizPage() {
                 return (
                   <div
                     key={i}
-                    className={`p-4 rounded-xl border ${
+                    className={`p-4 rounded-lg border ${
                       isCorrect ? "border-green-100 bg-green-50" : "border-red-100 bg-red-50"
                     }`}
                   >
@@ -532,7 +532,7 @@ export default function StudentQuizPage() {
               setActiveQuiz(null);
               setLastResult(null);
             }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition shadow-lg shadow-purple-200"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
           >
             <MdReplay /> Back to Quizzes
           </button>

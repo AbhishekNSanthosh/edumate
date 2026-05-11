@@ -6,6 +6,7 @@ import "@styles/scss/main.scss";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "../context/AuthContext";
 import EduBot from "@components/EduBot";
+import NetworkStatus from "@components/NetworkStatus";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -33,6 +34,8 @@ export default function RootLayout({
           <Toaster position="bottom-center" reverseOrder={false} />
           {/* AI Chatbot - Available on all pages */}
           <EduBot />
+          {/* Network Status Monitor */}
+          <NetworkStatus />
         </AuthProvider>
       </body>
     </html>

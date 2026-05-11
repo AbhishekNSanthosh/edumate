@@ -167,8 +167,8 @@ export default function HostelTransportPage() {
     return (
       <div className="p-6 bg-gray-50 min-h-screen animate-pulse">
         <div className="h-7 w-52 bg-gray-200 rounded mb-6" />
-        <div className="h-12 bg-white rounded-xl border border-gray-200 mb-4 w-64" />
-        <div className="h-64 bg-white rounded-xl border border-gray-200" />
+        <div className="h-12 bg-white rounded-lg border border-gray-200 mb-4 w-64" />
+        <div className="h-64 bg-white rounded-lg border border-gray-200" />
       </div>
     );
   }
@@ -178,12 +178,12 @@ export default function HostelTransportPage() {
     return (
       <div className="p-6 bg-gray-50 min-h-screen">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Hostel & Transport</h1>
-        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center max-w-lg mx-auto">
+        <div className="bg-white border border-gray-200 rounded-lg p-12 text-center max-w-lg mx-auto">
           <div className="flex justify-center mb-4 gap-3">
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
               <MdHome className="text-blue-500 text-2xl" />
             </div>
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center">
               <MdDirectionsBus className="text-amber-500 text-2xl" />
             </div>
           </div>
@@ -235,7 +235,7 @@ export default function HostelTransportPage() {
     const isPaid = h.feeStatus === "Paid";
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 border border-gray-200 rounded-xl p-5 bg-white">
+        <div className="lg:col-span-2 border border-gray-200 rounded-lg p-5 bg-white">
           <div className="flex items-center gap-2 mb-5">
             <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <MdHome className="text-blue-600 text-lg" />
@@ -249,7 +249,7 @@ export default function HostelTransportPage() {
             <InfoRow label="Warden Contact" value={h.wardenContact} />
           </div>
         </div>
-        <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col justify-between">
+        <div className="border border-gray-200 rounded-lg p-5 bg-white flex flex-col justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Fee Status</p>
             <div className="flex items-center justify-between mb-1">
@@ -300,7 +300,7 @@ export default function HostelTransportPage() {
     const isPaid = t.feeStatus === "Paid";
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 border border-gray-200 rounded-xl p-5 bg-white">
+        <div className="lg:col-span-2 border border-gray-200 rounded-lg p-5 bg-white">
           <div className="flex items-center gap-2 mb-5">
             <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
               <MdDirectionsBus className="text-amber-500 text-lg" />
@@ -320,7 +320,7 @@ export default function HostelTransportPage() {
             <InfoRow label="Driver Info" value={`${t.driverName} · ${t.driverContact}`} />
           </div>
         </div>
-        <div className="border border-gray-200 rounded-xl p-5 bg-white flex flex-col justify-between">
+        <div className="border border-gray-200 rounded-lg p-5 bg-white flex flex-col justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Fee Status</p>
             <div className="flex items-center justify-between mb-1">
@@ -365,7 +365,7 @@ export default function HostelTransportPage() {
         <p className="text-gray-500 text-sm mt-1">View your accommodation and commute details</p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         {/* Tabs */}
         <div className="border-b border-gray-200 flex px-4">
           {tabBtn("hostel", "Hostel", MdHome)}

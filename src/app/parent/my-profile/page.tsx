@@ -10,6 +10,15 @@ import {
 } from "firebase/auth";
 import { db } from "../../../config/firebaseConfig";
 import toast from "react-hot-toast";
+import {
+  IoCamera,
+  IoSave,
+  IoRefresh,
+  IoCheckmarkCircle,
+  IoPersonOutline,
+  IoShieldOutline,
+  IoSchoolOutline,
+} from "react-icons/io5";
 
 interface ParentProfile {
   name: string;
@@ -23,10 +32,17 @@ interface ParentProfile {
   photoUrl?: string;
 }
 
+const inputCls =
+  "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition bg-white";
+const disabledCls =
+  "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-400 cursor-not-allowed";
+const sectionCls = "bg-white rounded-lg border border-gray-200 p-6";
+
 export default function MyProfile() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [parentData, setParentData] = useState<ParentProfile>({
     name: "",
@@ -34,9 +50,10 @@ export default function MyProfile() {
     phone: "",
     address: "",
     occupation: "",
-    relationship: "",
+    relationship: "Parent",
     studentName: "",
     studentId: "",
+    photoUrl: "",
   });
 
   const [passwords, setPasswords] = useState({
@@ -50,13 +67,10 @@ export default function MyProfile() {
       if (!user) return;
       try {
         setLoading(true);
-        // 1. Fetch Student Data (for reference)
         const studentDoc = await getDoc(doc(db, "students", user.uid));
         const sData = studentDoc.exists() ? studentDoc.data() : {};
 
-        // 2. Fetch Parent Data
-        const parentDocRef = doc(db, "parents", user.uid);
-        const parentDoc = await getDoc(parentDocRef);
+        const parentDoc = await getDoc(doc(db, "parents", user.uid));
 
         if (parentDoc.exists()) {
           const pData = parentDoc.data();
@@ -72,17 +86,12 @@ export default function MyProfile() {
             photoUrl: pData.photoUrl || "",
           });
         } else {
-          // Fallback if no parent doc exists yet (should exist from creation, but safety)
-          setParentData({
-            name: "",
+          setParentData((prev) => ({
+            ...prev,
             email: user.email || "",
-            phone: "",
-            address: "",
-            occupation: "",
-            relationship: "Parent",
             studentName: sData.name || "Student",
             studentId: sData.regNumber || "",
-          });
+          }));
         }
       } catch (error) {
         console.error("Error fetching profile", error);
@@ -112,20 +121,22 @@ export default function MyProfile() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Limit to 500KB to ensure Base64 string fits in Firestore document (1MB limit)
     if (file.size > 0.5 * 1024 * 1024) {
       toast.error("File size too large. Please upload an image under 500KB.");
       return;
     }
 
+    setUploadingPhoto(true);
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === "string") {
-        setParentData((prev) => ({
-          ...prev,
-          photoUrl: reader.result as string,
-        }));
+        setParentData((prev) => ({ ...prev, photoUrl: reader.result as string }));
       }
+      setUploadingPhoto(false);
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read image");
+      setUploadingPhoto(false);
     };
     reader.readAsDataURL(file);
   };
@@ -137,7 +148,6 @@ export default function MyProfile() {
     const toastId = toast.loading("Saving changes...");
 
     try {
-      // 1. Update Firestore Profile (using setDoc with merge to create if missing)
       await setDoc(
         doc(db, "parents", user.uid),
         {
@@ -152,9 +162,6 @@ export default function MyProfile() {
         { merge: true },
       );
 
-      // ... rest of logic remains similar
-
-      // 2. Handle Password Change (if provided)
       if (passwords.new) {
         if (passwords.new !== passwords.confirm) {
           toast.error("New passwords do not match", { id: toastId });
@@ -162,112 +169,188 @@ export default function MyProfile() {
           return;
         }
         if (passwords.new.length < 6) {
-          toast.error("Password too short", { id: toastId });
+          toast.error("Password too short — minimum 6 characters", { id: toastId });
           setSaving(false);
           return;
         }
         if (!passwords.current) {
-          toast.error("Current password required to change password", {
-            id: toastId,
-          });
+          toast.error("Current password required", { id: toastId });
           setSaving(false);
           return;
         }
-
-        // Re-authenticate
-        const credential = EmailAuthProvider.credential(
-          user.email!,
-          passwords.current,
-        );
+        const credential = EmailAuthProvider.credential(user.email!, passwords.current);
         await reauthenticateWithCredential(user, credential);
-
-        // Update
         await updatePassword(user, passwords.new);
         setPasswords({ current: "", new: "", confirm: "" });
-        toast.success("Profile & Password Updated!", { id: toastId });
+        toast.success("Profile & password updated!", { id: toastId });
       } else {
-        toast.success("Profile Updated!", { id: toastId });
+        toast.success("Profile updated!", { id: toastId });
       }
     } catch (error: any) {
       console.error("Update error", error);
-      if (error.code === "auth/wrong-password") {
-        toast.error("Incorrect current password", { id: toastId });
-      } else {
-        toast.error("Failed to update profile", { id: toastId });
-      }
+      const msg =
+        error.code === "auth/wrong-password"
+          ? "Incorrect current password"
+          : "Failed to update profile";
+      toast.error(msg, { id: toastId });
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading)
+  const initials =
+    parentData.name?.charAt(0)?.toUpperCase() ||
+    user?.email?.charAt(0)?.toUpperCase() ||
+    "P";
+
+  if (loading) {
     return (
-      <div className="mt-[100px] flex justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 p-6 animate-pulse">
+        <div className="h-8 w-48 bg-gray-200 rounded mb-2" />
+        <div className="h-4 w-64 bg-gray-100 rounded mb-8" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 flex flex-col items-center">
+              <div className="w-28 h-28 bg-gray-200 rounded-full mb-4" />
+              <div className="h-5 w-32 bg-gray-200 rounded mb-2" />
+              <div className="h-3 w-40 bg-gray-100 rounded" />
+            </div>
+          </div>
+          <div className="lg:col-span-2 space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 h-48" />
+            <div className="bg-white rounded-lg border border-gray-200 h-56" />
+          </div>
+        </div>
       </div>
     );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col p-6">
-      <div className=" w-full">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Header */}
-          <div className="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Parent Profile
-              </h1>
-              <p className="text-gray-500 text-sm">
-                Manage your contact information and linked student details.
-              </p>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+        <p className="text-gray-500 text-sm mt-1">
+          Manage your contact information and account settings.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left — Avatar card */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className={`${sectionCls} text-center`}>
+            <div className="relative inline-block mb-4">
+              <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-gray-200 relative">
+                {uploadingPhoto ? (
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-white" />
+                  </div>
+                ) : parentData.photoUrl ? (
+                  <img
+                    src={parentData.photoUrl}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-700 font-bold text-2xl">
+                    {initials}
+                  </div>
+                )}
+              </div>
+              <label
+                htmlFor="photo-upload"
+                className="absolute bottom-0 right-1 p-1.5 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 transition"
+                title="Update Photo"
+              >
+                <IoCamera size={16} />
+              </label>
+              <input
+                id="photo-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoUpload}
+                disabled={uploadingPhoto}
+              />
+            </div>
+
+            <h2 className="text-lg font-bold text-gray-900">
+              {parentData.name || "—"}
+            </h2>
+            <p className="text-xs text-gray-500 mb-1">{parentData.email}</p>
+            <p className="text-xs text-gray-400 mb-3">{parentData.occupation || "Parent / Guardian"}</p>
+
+            <div className="flex flex-wrap gap-2 justify-center">
+              <span className="px-2.5 py-1 bg-purple-50 text-purple-700 text-xs font-semibold rounded-full border border-purple-100">
+                {parentData.relationship || "Parent"}
+              </span>
+              <span className="px-2.5 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-full border border-green-100 flex items-center gap-1">
+                <IoCheckmarkCircle className="text-green-500" /> Active
+              </span>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-8">
-            {/* Photo & Basic Info */}
-            <div className="flex flex-col md:flex-row gap-8 items-start">
-              <div className="flex flex-col items-center space-y-3">
-                <div className="relative w-32 h-32 rounded-full border-4 border-gray-100 shadow overflow-hidden bg-gray-200">
-                  {parentData.photoUrl ? (
-                    <img
-                      src={parentData.photoUrl}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl text-gray-400 font-bold">
-                      {parentData.name
-                        ? parentData.name.charAt(0).toUpperCase()
-                        : "P"}
-                    </div>
-                  )}
-                </div>
-                <label className="cursor-pointer text-sm text-blue-600 font-medium hover:text-blue-700">
-                  Change Photo
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                  />
-                </label>
+          {/* Linked Student Card */}
+          <div className={sectionCls}>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <IoSchoolOutline size={14} /> Linked Student
+            </p>
+            <div className="space-y-2">
+              <div>
+                <p className="text-xs text-gray-400">Student Name</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {parentData.studentName || "—"}
+                </p>
               </div>
+              <div>
+                <p className="text-xs text-gray-400">Register Number</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {parentData.studentId || "—"}
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 mt-1 text-xs text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+                <IoCheckmarkCircle size={11} /> Verified Link
+              </span>
+            </div>
+          </div>
 
-              <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className={sectionCls}>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              Quick Actions
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 text-left text-gray-700 transition-colors text-sm"
+            >
+              <IoRefresh size={16} className="text-gray-400" />
+              Refresh Profile Data
+            </button>
+          </div>
+        </div>
+
+        {/* Right — Edit form */}
+        <div className="lg:col-span-2">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Personal Information */}
+            <div className={sectionCls}>
+              <h2 className="text-base font-semibold text-gray-900 mb-5 flex items-center gap-2">
+                <IoPersonOutline size={17} className="text-gray-400" />
+                Personal Information
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Parent Name
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Full Name
                   </label>
                   <input
                     name="name"
                     value={parentData.name}
                     onChange={handleChange}
-                    placeholder="Your Full Name"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                    placeholder="Your full name"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     Occupation
                   </label>
                   <input
@@ -275,18 +358,18 @@ export default function MyProfile() {
                     value={parentData.occupation}
                     onChange={handleChange}
                     placeholder="e.g. Engineer"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     Relationship to Student
                   </label>
                   <select
                     name="relationship"
                     value={parentData.relationship}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputCls}
                   >
                     <option value="Father">Father</option>
                     <option value="Mother">Mother</option>
@@ -295,7 +378,7 @@ export default function MyProfile() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     Contact Number
                   </label>
                   <input
@@ -303,27 +386,22 @@ export default function MyProfile() {
                     value={parentData.phone}
                     onChange={handleChange}
                     type="tel"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="+91..."
+                    className={inputCls}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email Address (Login)
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Email Address
                   </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      name="email"
-                      value={parentData.email}
-                      readOnly
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
-                    />
-                    <span className="text-xs text-gray-400 shrink-0">
-                      Controlled by Student ID
-                    </span>
-                  </div>
+                  <input
+                    value={parentData.email}
+                    disabled
+                    className={disabledCls}
+                  />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     Residential Address
                   </label>
                   <textarea
@@ -331,89 +409,91 @@ export default function MyProfile() {
                     value={parentData.address}
                     onChange={handleChange}
                     rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  ></textarea>
+                    placeholder="Enter your address..."
+                    className={`${inputCls} resize-none`}
+                  />
                 </div>
               </div>
             </div>
 
-            <hr className="border-gray-100" />
-
-            {/* Linked Student Info (Read Only) */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Linked Student Information
+            {/* Security */}
+            <div className={sectionCls}>
+              <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                <IoShieldOutline size={17} className="text-gray-400" />
+                Security Settings
               </h2>
-              <div className="bg-blue-50 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between items-start gap-4 border border-blue-100">
-                <div>
-                  <p className="text-sm text-blue-800 font-medium">
-                    Student Name
-                  </p>
-                  <p className="text-lg font-bold text-gray-900">
-                    {parentData.studentName}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-blue-800 font-medium">
-                    Register Number
-                  </p>
-                  <p className="text-lg font-bold text-gray-900">
-                    {parentData.studentId}
-                  </p>
-                </div>
-                <div className="bg-white px-3 py-1 rounded border border-blue-200 text-xs text-blue-600">
-                  Verified Link
-                </div>
-              </div>
-            </div>
-
-            <hr className="border-gray-100" />
-
-            {/* Password Change Warning */}
-            <div className="bg-orange-50 border border-orange-100 rounded-lg p-4">
-              <h3 className="text-orange-800 font-semibold mb-1">
-                Account Security
-              </h3>
-              <p className="text-sm text-orange-700 mb-4">
-                Note: You are logged in using Student Credentials. Changing the
-                password here will change it for the student account as well.
+              <p className="text-xs text-orange-600 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 mb-4">
+                Changing the password here will also update the linked student account.
               </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <input
-                  type="password"
-                  name="current"
-                  placeholder="Current Password"
-                  value={passwords.current}
-                  onChange={handlePasswordChange}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                />
-                <input
-                  type="password"
-                  name="new"
-                  placeholder="New Password"
-                  value={passwords.new}
-                  onChange={handlePasswordChange}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                />
-                <input
-                  type="password"
-                  name="confirm"
-                  placeholder="Confirm New Password"
-                  value={passwords.confirm}
-                  onChange={handlePasswordChange}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Current Password
+                  </label>
+                  <input
+                    type="password"
+                    name="current"
+                    value={passwords.current}
+                    onChange={handlePasswordChange}
+                    placeholder="Required to change password"
+                    className={inputCls}
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      name="new"
+                      value={passwords.new}
+                      onChange={handlePasswordChange}
+                      placeholder="Min 6 characters"
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      name="confirm"
+                      value={passwords.confirm}
+                      onChange={handlePasswordChange}
+                      placeholder="Confirm new password"
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-4">
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-5 py-2 rounded-lg text-gray-600 text-sm font-medium border border-gray-200 hover:bg-gray-50 transition"
+              >
+                Discard
+              </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/30"
+                className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
               >
-                {saving ? "Saving Changes..." : "Save Changes"}
+                {saving ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <IoSave size={16} /> Save Changes
+                  </>
+                )}
               </button>
             </div>
           </form>

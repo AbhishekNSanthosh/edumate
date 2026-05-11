@@ -20,7 +20,6 @@ export default function FacultyLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // Forgot Password State
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
 
@@ -77,7 +76,6 @@ export default function FacultyLogin() {
         password,
       );
 
-      // Verify if the logged-in user is actually a faculty member
       const facultyDocRef = doc(db, "faculty", userCredential.user.uid);
       const facultyDocSnap = await getDoc(facultyDocRef);
 
@@ -85,8 +83,6 @@ export default function FacultyLogin() {
         await auth.signOut();
         throw { code: "auth/user-not-found" };
       }
-
-      console.log("✅ Logged in:", userCredential.user);
 
       toast.success("Welcome back! Redirecting...", { id: toastId });
       setTimeout(() => {
@@ -122,12 +118,6 @@ export default function FacultyLogin() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      // Handled by onSubmit
-    }
-  };
-
   if (authLoading || isRedirecting)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -136,152 +126,262 @@ export default function FacultyLogin() {
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute inset-0">
-        <div className="absolute top-20 left-10 w-32 h-32 bg-[#1f75fe]/10 rounded-full blur-xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-10 w-48 h-48 bg-purple-400/10 rounded-full blur-2xl animate-pulse delay-1000"></div>
+    <div className="min-h-screen flex">
+      {/* Left Panel — Illustration */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-[#0c2461] via-[#1f75fe] to-[#60aeff] flex-col items-center justify-center p-12 overflow-hidden">
+        {/* Background circles */}
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-white/5 rounded-full" />
+        <div className="absolute -bottom-32 -right-20 w-[28rem] h-[28rem] bg-white/5 rounded-full" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[36rem] h-[36rem] bg-white/[0.03] rounded-full" />
+
+        {/* Illustration */}
+        <div className="relative z-10 flex flex-col items-center gap-10 w-full max-w-sm">
+          <svg
+            viewBox="0 0 420 340"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-full drop-shadow-2xl"
+          >
+            {/* Classroom board / whiteboard */}
+            <rect x="40" y="30" width="340" height="180" rx="14" fill="white" fillOpacity="0.12" />
+            <rect x="40" y="30" width="340" height="180" rx="14" stroke="white" strokeOpacity="0.25" strokeWidth="1.5" />
+
+            {/* Board top bar */}
+            <rect x="40" y="30" width="340" height="40" rx="14" fill="white" fillOpacity="0.1" />
+            <rect x="58" y="44" width="120" height="8" rx="4" fill="white" fillOpacity="0.7" />
+            <rect x="58" y="57" width="70" height="5" rx="2.5" fill="white" fillOpacity="0.35" />
+            {/* Close/action dots top right */}
+            <circle cx="350" cy="50" r="7" fill="white" fillOpacity="0.18" />
+            <circle cx="334" cy="50" r="7" fill="white" fillOpacity="0.18" />
+            <circle cx="318" cy="50" r="7" fill="white" fillOpacity="0.18" />
+
+            {/* Written lines on board — simulating lecture notes */}
+            <rect x="60" y="88" width="200" height="7" rx="3.5" fill="white" fillOpacity="0.45" />
+            <rect x="60" y="102" width="160" height="7" rx="3.5" fill="white" fillOpacity="0.3" />
+            <rect x="60" y="116" width="180" height="7" rx="3.5" fill="white" fillOpacity="0.38" />
+            <rect x="60" y="130" width="140" height="7" rx="3.5" fill="white" fillOpacity="0.28" />
+            <rect x="60" y="144" width="170" height="7" rx="3.5" fill="white" fillOpacity="0.35" />
+            <rect x="60" y="158" width="120" height="7" rx="3.5" fill="white" fillOpacity="0.25" />
+
+            {/* Mini chart on board right */}
+            <rect x="278" y="86" width="86" height="86" rx="10" fill="white" fillOpacity="0.1" stroke="white" strokeOpacity="0.18" strokeWidth="1" />
+            <rect x="290" y="148" width="12" height="18" rx="3" fill="white" fillOpacity="0.35" />
+            <rect x="306" y="138" width="12" height="28" rx="3" fill="white" fillOpacity="0.55" />
+            <rect x="322" y="126" width="12" height="40" rx="3" fill="#c4b5fd" fillOpacity="0.85" />
+            <rect x="338" y="133" width="12" height="33" rx="3" fill="white" fillOpacity="0.45" />
+            <rect x="290" y="96" width="36" height="6" rx="3" fill="white" fillOpacity="0.5" />
+
+            {/* Faculty figure (standing, simplified) */}
+            {/* Head */}
+            <circle cx="370" cy="138" r="16" fill="white" fillOpacity="0.22" />
+            {/* Body */}
+            <rect x="358" y="156" width="24" height="42" rx="8" fill="white" fillOpacity="0.18" />
+            {/* Left arm pointing to board */}
+            <line x1="358" y1="168" x2="328" y2="155" stroke="white" strokeOpacity="0.3" strokeWidth="5" strokeLinecap="round" />
+            {/* Right arm down */}
+            <line x1="382" y1="168" x2="390" y2="188" stroke="white" strokeOpacity="0.3" strokeWidth="5" strokeLinecap="round" />
+            {/* Legs */}
+            <line x1="362" y1="198" x2="356" y2="224" stroke="white" strokeOpacity="0.2" strokeWidth="5" strokeLinecap="round" />
+            <line x1="378" y1="198" x2="384" y2="224" stroke="white" strokeOpacity="0.2" strokeWidth="5" strokeLinecap="round" />
+
+            {/* Student desks row */}
+            <rect x="40" y="228" width="68" height="44" rx="10" fill="white" fillOpacity="0.1" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+            <circle cx="74" cy="218" r="10" fill="white" fillOpacity="0.2" />
+            <rect x="50" y="238" width="48" height="5" rx="2.5" fill="white" fillOpacity="0.35" />
+            <rect x="50" y="249" width="34" height="5" rx="2.5" fill="white" fillOpacity="0.22" />
+            <rect x="50" y="260" width="42" height="5" rx="2.5" fill="#a78bfa" fillOpacity="0.7" />
+
+            <rect x="126" y="228" width="68" height="44" rx="10" fill="white" fillOpacity="0.1" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+            <circle cx="160" cy="218" r="10" fill="white" fillOpacity="0.2" />
+            <rect x="136" y="238" width="48" height="5" rx="2.5" fill="white" fillOpacity="0.35" />
+            <rect x="136" y="249" width="34" height="5" rx="2.5" fill="white" fillOpacity="0.22" />
+            <rect x="136" y="260" width="42" height="5" rx="2.5" fill="#86efac" fillOpacity="0.7" />
+
+            <rect x="212" y="228" width="68" height="44" rx="10" fill="white" fillOpacity="0.1" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+            <circle cx="246" cy="218" r="10" fill="white" fillOpacity="0.2" />
+            <rect x="222" y="238" width="48" height="5" rx="2.5" fill="white" fillOpacity="0.35" />
+            <rect x="222" y="249" width="34" height="5" rx="2.5" fill="white" fillOpacity="0.22" />
+            <rect x="222" y="260" width="42" height="5" rx="2.5" fill="#fde68a" fillOpacity="0.7" />
+
+            <rect x="298" y="228" width="82" height="44" rx="10" fill="white" fillOpacity="0.1" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+            <circle cx="339" cy="218" r="10" fill="white" fillOpacity="0.2" />
+            <rect x="308" y="238" width="60" height="5" rx="2.5" fill="white" fillOpacity="0.35" />
+            <rect x="308" y="249" width="44" height="5" rx="2.5" fill="white" fillOpacity="0.22" />
+            <rect x="308" y="260" width="52" height="5" rx="2.5" fill="#c4b5fd" fillOpacity="0.7" />
+
+            {/* Floating badge — classes today */}
+            <rect x="18" y="14" width="130" height="36" rx="10" fill="#0c2461" fillOpacity="0.9" />
+            <rect x="18" y="14" width="130" height="36" rx="10" stroke="white" strokeOpacity="0.2" strokeWidth="1" />
+            <circle cx="36" cy="32" r="8" fill="#a78bfa" fillOpacity="0.85" />
+            <rect x="50" y="26" width="82" height="6" rx="3" fill="white" fillOpacity="0.9" />
+            <rect x="50" y="36" width="56" height="5" rx="2.5" fill="white" fillOpacity="0.5" />
+          </svg>
+
+          {/* Text */}
+          <div className="text-center space-y-3">
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              Faculty Teaching Portal
+            </h2>
+            <p className="text-blue-100/80 text-sm leading-relaxed max-w-xs">
+              Manage your classes, record attendance, upload materials, and track student progress — all in one place.
+            </p>
+          </div>
+
+          {/* Feature pills */}
+          <div className="flex flex-wrap gap-2 justify-center">
+            {["Class Schedule", "Attendance", "Study Materials", "Assignments"].map(
+              (label) => (
+                <span
+                  key={label}
+                  className="px-3 py-1 text-xs font-medium rounded-full bg-white/10 text-white/80 border border-white/15"
+                >
+                  {label}
+                </span>
+              )
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="max-w-md w-full space-y-8 relative z-10 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-8 border border-white/20">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <div className="mx-auto rounded-full flex items-center justify-center">
+      {/* Right Panel — Login Form */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12 bg-white relative">
+        {/* Subtle top-right blob for mobile */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 lg:hidden" />
+
+        <div className="w-full max-w-md relative z-10">
+          {/* Logo + heading */}
+          <div className="mb-10 space-y-3">
             <Image
-              src={"/brand/logo.svg"}
+              src="/brand/logo.svg"
               alt="Edumate Logo"
               width={120}
               height={40}
               priority
-              className="h-10 w-auto"
+              className="h-9 w-auto"
             />
-          </div>
-          <h2 className="text-3xl font-bold text-gray-900 tracking-tight">
-            Faculty Portal
-          </h2>
-          <p className="text-gray-500 text-sm">
-            Sign in to manage classes and students
-          </p>
-        </div>
-
-        {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-6"
-          onKeyDown={handleKeyDown}
-        >
-          <div className="space-y-1">
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700 ml-1"
-            >
-              Email Address
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 placeholder-gray-400 text-gray-900"
-              placeholder="faculty@example.com"
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 ml-1"
-            >
-              Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 pr-11 bg-gray-50/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 placeholder-gray-400 text-gray-900"
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-              </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 mt-4">
+                Faculty Sign In
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">
+                Sign in to manage classes and students
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-end text-sm">
-            <button
-              type="button"
-              onClick={() => setShowForgotPassword(true)}
-              className="text-blue-600 hover:text-blue-700 font-medium hover:underline focus:outline-none"
-            >
-              Forgot Password?
-            </button>
-          </div>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 placeholder-gray-400 text-gray-900 text-sm"
+                placeholder="faculty@example.com"
+                autoComplete="email"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-4 rounded-xl font-semibold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg
-                  className="animate-spin h-5 w-5 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
+            <div className="space-y-1.5">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 pr-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 placeholder-gray-400 text-gray-900 text-sm"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                Signing In...
-              </span>
-            ) : (
-              "Sign In"
-            )}
-          </button>
+                  {showPassword ? <FaEyeSlash size={17} /> : <FaEye size={17} />}
+                </button>
+              </div>
+            </div>
 
-          <div className="text-center pt-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm text-primary hover:text-primary/80 font-medium hover:underline focus:outline-none"
+              >
+                Forgot Password?
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary text-white py-3 px-4 rounded-xl font-semibold shadow-md shadow-primary/25 hover:shadow-primary/40 hover:brightness-105 active:scale-[0.98] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg
+                    className="animate-spin h-5 w-5 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Signing In...
+                </span>
+              ) : (
+                "Sign In"
+              )}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center">
             <button
               type="button"
               onClick={() => router.push("/")}
-              className="text-sm text-gray-500 hover:text-gray-900 font-medium transition-colors"
+              className="text-sm text-gray-400 hover:text-gray-700 font-medium transition-colors"
             >
               ← Back to Home
             </button>
           </div>
-        </form>
+        </div>
       </div>
 
       {/* Forgot Password Modal */}
       {showForgotPassword && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl p-6 w-[90%] max-w-sm shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 w-[90%] max-w-sm shadow-2xl">
             <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                Reset Password
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900">Reset Password</h3>
               <p className="text-gray-500 text-sm mt-1">
                 Enter your email to receive a reset link
               </p>
@@ -291,7 +391,7 @@ export default function FacultyLogin() {
               <div>
                 <label
                   htmlFor="reset-email"
-                  className="block text-sm font-medium text-gray-700 ml-1 mb-1"
+                  className="block text-sm font-medium text-gray-700 mb-1"
                 >
                   Email Address
                 </label>
@@ -301,8 +401,8 @@ export default function FacultyLogin() {
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  placeholder="Entet your registered email"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                  placeholder="Enter your registered email"
                   autoFocus
                 />
               </div>
@@ -314,13 +414,13 @@ export default function FacultyLogin() {
                     setShowForgotPassword(false);
                     setResetEmail("");
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors text-sm"
                 >
                   Send Link
                 </button>
