@@ -1,0 +1,311 @@
+================================================================================
+                        EDUBOT - HOW IT WORKS
+                   EduMate College Management Chatbot
+================================================================================
+
+OVERVIEW
+--------
+EduBot is a role-aware, AI-powered chatbot embedded in the EduMate portal.
+It answers academic queries for students, faculty, parents, and admins using
+real Firestore data and a locally running language model.
+
+
+================================================================================
+ARCHITECTURE AT A GLANCE
+================================================================================
+
+  User types a message
+        |
+        v
+  [1] Intent Detection (keyword matching - no AI, instant)
+        |
+        v
+  [2] Firestore Data Fetching (role-specific query)
+        |
+        v
+  [3] LLM Response Generation (Ollama - gemma3:4b running locally)
+        |
+        v
+  [4] Markdown response rendered in chat window
+        |
+        v
+  [5] (Optional) Text-to-Speech reads the response aloud
+
+
+================================================================================
+1. INTENT DETECTION (NLP - Keyword Based)
+================================================================================
+
+What it is:
+  A lightweight Natural Language Processing step that figures out WHAT the
+  user is asking about before fetching any data.
+
+How it works:
+  - A large keyword dictionary (INTENT_KEYWORDS) maps topics to word lists.
+  - The user's message is lowercased and checked against every keyword list.
+  - The first matching category becomes the "intent".
+
+Supported intents:
+  - attendance      -> "skip", "bunk", "75%", "present", "absent"
+  - assignments     -> "homework", "deadline", "submission", "due"
+  - timetable       -> "schedule", "period", "today's class"
+  - leaves          -> "leave balance", "leave application", "applied leave"
+  - results         -> "marks", "grade", "cgpa", "exam", "score"
+  - notifications   -> "notice", "announcement", "alert"
+  - profile         -> "my info", "my name", "my email", "who am i"
+  - internals       -> "internal mark", "series exam", "first series"
+  - evaluation      -> "appraisal", "faculty rating"
+  - students        -> "student list", "batch students" (admin/faculty only)
+  - faculty         -> "teacher list", "staff" (admin only)
+  - departments     -> "department info", "dept stats" (admin only)
+  - general         -> fallback when no specific keyword matches
+
+Why not use AI for intent detection?
+  Keyword matching is instantaneous and deterministic. Using an LLM just to
+  classify intent would add latency and cost without any benefit here.
+
+Multilingual support:
+  Keywords are defined in THREE forms for each intent:
+    a) English      -> "attendance", "skip", "absent"
+    b) Malayalam    -> "ഹാജർ", "ഹാജരായില്ല", "ക്ലാസ് മുടങ്ങി"
+    c) Manglish     -> "hajr", "class poyi", "haazar"
+  This means users can type in any of these styles and be understood.
+
+
+================================================================================
+2. ROLE-BASED ACCESS CONTROL
+================================================================================
+
+Every user is assigned one of four roles: student, faculty, parent, admin.
+
+Each role is locked to specific data and topics:
+  - student  -> own attendance, assignments, timetable, leaves, results,
+                internal marks, notifications, profile
+  - faculty  -> own attendance, leave, profile, assigned batches/students,
+                assignments, timetable, evaluations
+  - parent   -> child's attendance, assignments, results, timetable, leaves
+  - admin    -> institutional overview (all students, faculty, departments,
+                leaves, evaluations) — NOT their own personal attendance
+
+The LLM system prompt is different for each role and strictly forbids
+answering questions outside the allowed topic list.
+
+
+================================================================================
+3. FIRESTORE DATA FETCHING
+================================================================================
+
+Once the intent is known, the front-end (EduBot.tsx) queries Firebase Firestore
+to get the relevant data for the current user's role.
+
+Examples:
+  - Intent "attendance", role "student"  -> queries the student's attendance
+    records, calculates attendancePercentage, classesCanSkip, classesNeededToReach75
+  - Intent "assignments", role "faculty" -> fetches assignments the faculty
+    created across their subjects
+  - Intent "profile", role "parent"      -> fetches both parent profile AND
+    child profile in one combined object
+
+The fetched data (contextData) is passed directly to the API route as JSON.
+The LLM is told: "USE ONLY THIS DATA. DO NOT INVENT ANYTHING."
+
+
+================================================================================
+4. LOCAL AI / LLM - OLLAMA + GEMMA 3:4B
+================================================================================
+
+Model:   gemma3:4b (Google's Gemma 3, 4 billion parameters)
+Runtime: Ollama (runs locally on the developer's machine at localhost:11434)
+
+Why local?
+  - No API costs for every message.
+  - Data stays on the machine (no student data sent to cloud AI services).
+  - Works without internet after the model is downloaded.
+
+How it's called:
+  POST http://localhost:11434/api/chat
+  Body: { model, messages: [system, ...history, user], stream: false }
+
+System prompt structure:
+  - Role persona  ("You are EduBot, a student assistant...")
+  - Strict data-fidelity rules  (never invent data, use ONLY retrieved JSON)
+  - Scope rules  (only answer allowed topics for this role)
+  - Formatting rules  (use Markdown tables, headers, emojis)
+  - The actual Firestore data as a JSON block
+  - The user's question
+
+Temperature settings:
+  - 0.1 for data queries  -> near-deterministic, factual answers
+  - 0.3 for general queries  -> slightly more conversational
+
+Chat history (memory):
+  The last 10 messages are included as a sliding window so the model has
+  short-term context (e.g., "show me Chemistry specifically" after asking
+  about all subjects).
+
+Token budgets:
+  - English responses  -> up to 500 tokens
+  - Malayalam responses -> up to 900 tokens (Malayalam script is more verbose)
+
+Error handling:
+  If Ollama is not running, the API returns HTTP 503 with a clear message
+  instead of crashing silently.
+
+
+================================================================================
+5. LANGUAGE DETECTION (MULTILINGUAL NLP)
+================================================================================
+
+How Malayalam is detected:
+  A simple Unicode range check: /[ഀ-ൿ]/
+  If ANY character in the user's message falls in the Malayalam Unicode block,
+  the bot switches to full Malayalam response mode.
+
+Malayalam response mode:
+  - The system prompt instructs the LLM to respond ENTIRELY in Malayalam.
+  - A reference vocabulary table (MALAYALAM_VOCAB) of ~25 key academic terms
+    is injected into the prompt to keep spelling consistent.
+  - Data values (numbers, dates, percentages) remain in English/ASCII.
+  - If the LLM doesn't know a Malayalam word, it falls back to the English word.
+
+English response mode (default):
+  - The system prompt strictly enforces English-only output.
+  - No foreign scripts or mixed languages.
+
+
+================================================================================
+6. TEXT-TO-SPEECH (TTS)
+================================================================================
+
+Technology:
+  Browser-native Web Speech API (SpeechSynthesis) — no external service needed.
+
+How it works:
+  1. When the bot sends a response, TTS is triggered automatically.
+  2. The response text is cleaned before reading:
+     - Markdown stripped (###, **, |, -, etc.)
+     - Emojis removed
+     - Newlines collapsed
+  3. A SpeechSynthesisUtterance is created with:
+     - Rate: 0.95 (slightly slower than default for clarity)
+     - Pitch: 1.0 (natural)
+     - Volume: 1.0
+  4. The browser reads it aloud using the device's default voice.
+
+User controls:
+  - Speaker icon (FaVolumeUp) in the chat header toggles TTS on/off.
+  - Mute icon (FaVolumeMute) shows when TTS is disabled.
+  - TTS automatically stops when the chat window is closed.
+
+Limitations:
+  - Voice quality depends on the operating system's installed TTS engine.
+  - Malayalam TTS is read in English phonetics unless the OS has a
+    Malayalam voice installed (most devices do not).
+
+
+================================================================================
+7. SPEECH-TO-TEXT (STT / VOICE INPUT)
+================================================================================
+
+Technology:
+  Browser-native Web Speech API (SpeechRecognition) — no external service needed.
+
+How it works:
+  1. User clicks the microphone icon (FaMicrophone).
+  2. The browser asks for microphone permission.
+  3. SpeechRecognition listens and returns a transcript in real time.
+  4. The transcript is placed into the message input box.
+  5. User can review and send it normally.
+
+Language:
+  Configured for "en-US" by default.
+  (Malayalam voice input depends on browser/OS support.)
+
+Limitations:
+  - Only works in Chromium-based browsers (Chrome, Edge).
+  - Not supported in Firefox or Safari by default.
+  - Background noise affects accuracy.
+
+
+================================================================================
+8. INTERNAL MARKS CALCULATION (BUILT-IN FORMULA)
+================================================================================
+
+When intent is "internals", the LLM is given the exact formula to use
+(rather than guessing):
+
+  Internal Mark (out of 50) = Attendance Mark + Assignment Mark + Series Mark
+
+  Attendance Mark (out of 10):
+    >= 90%  -> 10 marks
+    85-89%  -> 9 marks
+    80-84%  -> 8 marks
+    75-79%  -> 7 marks
+    < 75%   -> 5 marks
+
+  Assignment Mark (out of 15):
+    (scored / maxMarks) * 15
+
+  Series Exam Mark (out of 25):
+    best(first_series, second_series) / maxMarks * 25
+
+The LLM displays results as a Markdown table:
+  Subject | Attendance Mark (/10) | Assignment Mark (/15) | Series Mark (/25) | Total (/50)
+
+
+================================================================================
+9. ATTENDANCE PREDICTION (PRE-CALCULATED)
+================================================================================
+
+For attendance queries, the front-end pre-calculates these values BEFORE
+sending data to the LLM:
+
+  - attendancePercentage        (current %)
+  - classesCanSkip              (how many more classes can be missed to stay at 75%)
+  - classesNeededToReach75      (how many to attend if currently below 75%)
+  - futureProjection            (if user asks "if X days remain, how many can I skip")
+
+The LLM is instructed to READ these values from the data, NOT recalculate them.
+This avoids arithmetic errors in the LLM.
+
+
+================================================================================
+10. RESPONSE RENDERING
+================================================================================
+
+The chat window renders bot responses as rich Markdown using:
+  - react-markdown
+  - remark-gfm (GitHub Flavored Markdown - for tables)
+
+Supported formatting:
+  - ### Headers
+  - **Bold** labels
+  - GFM tables (Field | Value style)
+  - Emoji icons
+  - Bullet points for follow-up suggestions
+
+The UI is styled as a floating chat window pinned to the bottom-right corner
+of every page in the portal.
+
+
+================================================================================
+SUMMARY TABLE
+================================================================================
+
+Feature               | Technology Used
+----------------------|------------------------------------------------------
+Intent Detection      | Keyword matching (JavaScript, no AI)
+Multilingual NLP      | Unicode range detection + keyword lists
+Language Model        | Ollama (local) + Google Gemma 3 4B
+Data Source           | Firebase Firestore (real-time DB)
+Text-to-Speech        | Web Speech API (SpeechSynthesis) - browser native
+Speech-to-Text        | Web Speech API (SpeechRecognition) - browser native
+Response Rendering    | react-markdown + remark-gfm
+Auth / Role Detection | Firebase Authentication
+Chat Memory           | Sliding window of last 10 messages
+Markdown Tables       | GFM tables via remark-gfm plugin
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================

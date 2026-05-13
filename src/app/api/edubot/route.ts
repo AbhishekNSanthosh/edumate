@@ -178,10 +178,16 @@ User: "${userMessage || "help"}"`;
 STRICT DATA-FIDELITY RULES (ZERO TOLERANCE — NEVER VIOLATE)
 ════════════════════════════════════════
 1. YOU MUST ONLY display information that is EXPLICITLY present in the RETRIEVED DATA JSON below.
-4. The data provides pre-calculated attendance numbers: \`attendancePercentage\`, \`classesCanSkip\`, and \`classesNeededToReach75\`. 
-5. You MUST simply state these pre-calculated numbers when asked about skipping classes or meeting attendance requirements. 
+4. The data provides pre-calculated attendance numbers: \`attendancePercentage\`, \`classesCanSkip\`, \`classesNeededToReach75\`, and optionally \`futureProjection\`.
+5. You MUST simply state these pre-calculated numbers when asked about skipping classes or meeting attendance requirements.
    - Example response: "You can skip X more classes" or "You need to attend Y more classes".
    - IMPORTANT: Do NOT do any mathematical calculations for attendance predictions. DO NOT explain formulas. Just provide the final exact number from the data.
+5a. HYPOTHETICAL / FUTURE DAYS QUERIES: If the data contains a \`futureProjection\` object for a subject, the user asked about a future scenario. Use these fields to answer:
+   - \`futureProjection.futureDays\` — the number of upcoming days the user asked about
+   - \`futureProjection.mustAttendOfFuture\` — how many of those future days they must attend to reach 75%
+   - \`futureProjection.canSkipOfFuture\` — how many of those future days they can skip
+   - Example response: "Out of the {futureDays} upcoming days, you must attend at least {mustAttendOfFuture} to reach 75% attendance. You can skip {canSkipOfFuture}."
+   - Show this for every subject in a table when the user asks generally, or just for the specific subject if they named one.
 6. INTERNAL MARKS CALCULATION (use this formula when intent is "internals"):
    The internal mark is calculated per subject, out of 50 total:
    a) **Attendance (out of 10):** If attendance% >= 90% → 10 marks. If 85-89% → 9. If 80-84% → 8. If 75-79% → 7. Below 75% → 5.
@@ -235,6 +241,7 @@ Answer the user's specific question using the retrieved data above. If the user 
 
 IMPORTANT: If the data contains "_adminOverview: true", this is an INSTITUTIONAL overview — NOT the admin's personal data. The admin does NOT attend classes. Present the data as a system-wide attendance report, NOT as "your attendance". Never show UIDs or doc IDs — use student names only.
 IMPORTANT: If the data contains a "child" key (parent role profile), present the "child" section as "### 👤 Student Profile" and the "parent" section as "### 👨‍👩‍👦 Parent Contact". Never label the child's section as "parent" or vice versa.
+IMPORTANT: If the data contains "_type: department_list", this is a LIST OF ACADEMIC DEPARTMENTS — NOT a personal profile. Use header "### 🏢 Departments" and render a table with columns: Department Name | Code | Head of Department | Status | Students. Never show this as a profile.
 
 ${languageInstruction}`;
 

@@ -245,6 +245,8 @@ const GREETING_KEYWORDS = [
 
 function isGreeting(message: string): boolean {
   const lower = message.trim().toLowerCase();
+  // Only treat as greeting if the message is short (≤5 words) and contains just a greeting
+  if (lower.split(/\s+/).length > 5) return false;
   return GREETING_KEYWORDS.some(
     (kw) =>
       lower === kw || lower.startsWith(kw + " ") || lower.endsWith(" " + kw),
@@ -463,6 +465,10 @@ async function fetchForIntent(
           }
         });
         
+        // Detect hypothetical future-days question (e.g. "if there are 10 working days")
+        const futureDaysMatch = userMessage?.match(/(\d+)\s*(?:working\s+)?days?/i);
+        const futureDays = futureDaysMatch ? parseInt(futureDaysMatch[1], 10) : null;
+
         // Pre-calculate predictions so AI doesn't have to do math
         const results = Object.values(bySubject).map((s: any) => {
           const t = s.totalClasses;
@@ -472,13 +478,25 @@ async function fetchForIntent(
           skip = skip < 0 ? 0 : skip;
           let need = Math.ceil(3 * t - 4 * a);
           need = need < 0 ? 0 : need;
-          
-          return {
+
+          const entry: any = {
             ...s,
             attendancePercentage: pct.toFixed(1) + "%",
             classesCanSkip: pct >= 75 ? skip : 0,
-            classesNeededToReach75: pct < 75 ? need : 0
+            classesNeededToReach75: pct < 75 ? need : 0,
           };
+
+          if (futureDays !== null) {
+            const mustAttend = Math.max(0, Math.ceil(0.75 * (t + futureDays) - a));
+            const canSkipOfFuture = futureDays - Math.min(mustAttend, futureDays);
+            entry.futureProjection = {
+              futureDays,
+              mustAttendOfFuture: Math.min(mustAttend, futureDays),
+              canSkipOfFuture: Math.max(0, canSkipOfFuture),
+            };
+          }
+
+          return entry;
         });
         return results;
       }
@@ -514,6 +532,9 @@ async function fetchForIntent(
           }
         });
         
+        const futureDaysMatchP = userMessage?.match(/(\d+)\s*(?:working\s+)?days?/i);
+        const futureDaysP = futureDaysMatchP ? parseInt(futureDaysMatchP[1], 10) : null;
+
         const results = Object.values(bySubject).map((s: any) => {
           const t = s.totalClasses;
           const a = s.attendedClasses;
@@ -522,13 +543,25 @@ async function fetchForIntent(
           skip = skip < 0 ? 0 : skip;
           let need = Math.ceil(3 * t - 4 * a);
           need = need < 0 ? 0 : need;
-          
-          return {
+
+          const entry: any = {
             ...s,
             attendancePercentage: pct.toFixed(1) + "%",
             classesCanSkip: pct >= 75 ? skip : 0,
-            classesNeededToReach75: pct < 75 ? need : 0
+            classesNeededToReach75: pct < 75 ? need : 0,
           };
+
+          if (futureDaysP !== null) {
+            const mustAttend = Math.max(0, Math.ceil(0.75 * (t + futureDaysP) - a));
+            const canSkipOfFuture = futureDaysP - Math.min(mustAttend, futureDaysP);
+            entry.futureProjection = {
+              futureDays: futureDaysP,
+              mustAttendOfFuture: Math.min(mustAttend, futureDaysP),
+              canSkipOfFuture: Math.max(0, canSkipOfFuture),
+            };
+          }
+
+          return entry;
         });
         return results;
       }
@@ -1067,7 +1100,19 @@ async function fetchForIntent(
     case "departments": {
       if (user.role === "admin") {
         const snap = await getDocs(col(db, "departments"));
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        return {
+          _type: "department_list",
+          departments: snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              name: data.name,
+              code: data.code,
+              hod: data.hod || "Not assigned",
+              status: data.status,
+              studentCount: data.students ?? 0,
+            };
+          }),
+        };
       }
       return null;
     }
